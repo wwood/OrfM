@@ -1,6 +1,8 @@
 OrfM
 ====
 
+NOTE: not really tested properly yet!
+
 A simple and not slow ORF caller. No bells or whistles like frameshift detection, just a straightforward goal 
 of returning a FASTA file of open reading frames over a certain length from a FASTA/Q file of nucleotide sequences. 
 
