@@ -295,13 +295,17 @@ int main(int argc, char *argv[]){
   char c;
   char* codonTable = codonTable1;
 
-  while ((c = getopt (argc, argv, "hm:")) != -1){
+  while ((c = getopt (argc, argv, "hvm:")) != -1){
     switch (c){
+      case 'v':
+        printf("OrfM version 0.1\n");
+        exit(0);
       case 'h':
         printf("\n  Usage: orfm [options] <seq_file>\n\n");
         printf("  The <seq_file> can be a FASTA or FASTQ file, gzipped or uncompressed.\n\n");
         printf("  Options:\n");
         printf("   -m LENGTH   minimum number of nucleotides (not amino acids) to call an ORF on [default: %i]\n", min_length);
+        printf("   -v          show version information\n");
         printf("   -h          show this help\n");
         printf("\n");
         exit(0);
