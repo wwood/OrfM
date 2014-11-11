@@ -18,12 +18,6 @@ char codonTable1[64] = {
   'R', 'R', 'L', 'L', 'L', 'L', 'E', 'D', 'E', 'D', 'A', 'A', 'A',
   'A', 'G', 'G', 'G', 'G', 'V', 'V', 'V', 'V', '*', 'Y', '*', 'Y',
   'S', 'S', 'S', 'S', '*', 'C', 'W', 'C', 'L', 'F', 'L', 'F'};
-char codonTable11[64] = {
-  'K', 'N', 'K', 'N', 'T', 'T', 'T', 'T', 'R', 'S', 'R', 'S', 'I',
-  'I', 'M', 'I', 'Q', 'H', 'Q', 'H', 'P', 'P', 'P', 'P', 'R', 'R',
-  'R', 'R', 'L', 'L', 'L', 'L', 'E', 'D', 'E', 'D', 'A', 'A', 'A',
-  'A', 'G', 'G', 'G', 'G', 'V', 'V', 'V', 'V', '*', 'Y', '*', 'Y',
-  'S', 'S', 'S', 'S', '*', 'C', 'W', 'C', 'L', 'F', 'L', 'F'};
 
 
 inline char translate_codon(char* codon, char* codonTable){
@@ -81,7 +75,7 @@ inline char translate_codon_revcom(char* codon, char* codonTable){
 
 
 void translate(char* begin, int num, bool reverse, char* codonTable){
-  //char* tmp = malloc(100); printf("%s %i\n", strncpy(tmp, begin, num), reverse); free(tmp);
+//   char* tmp = malloc(10000); printf("%s %i\n", strncpy(tmp, begin, num), reverse); free(tmp);
   if (reverse){
     num -= 3;
     for(;num >= 0; num-=3){
@@ -97,7 +91,11 @@ void translate(char* begin, int num, bool reverse, char* codonTable){
 }
 
 inline void print_sequence_header(kseq_t* seq_struct, int start_position, int frame, int *orf_counter){
-  printf(">%s_%i_%i_%i\n", seq_struct->name.s, start_position+1, frame, (*orf_counter)++);
+  if (seq_struct->comment.l > 0){
+    printf(">%s_%i_%i_%i %s\n", seq_struct->name.s, start_position+1, frame, (*orf_counter)++, seq_struct->comment.s);
+  } else {
+    printf(">%s_%i_%i_%i\n", seq_struct->name.s, start_position+1, frame, (*orf_counter)++);
+  }
 }
 
 
@@ -106,12 +104,12 @@ void process_sequence_file(char *path, int min_length, char* codonTable){
   //create reverse searching structure
   AC_STRUCT * ac;
   ac = ac_alloc();
-  ac_add_string(ac, "TAA", 3, 0);
-  ac_add_string(ac, "TGA", 3, 1);
-  ac_add_string(ac, "TAG", 3, 2);
-  ac_add_string(ac, "TTA", 3, 3); //revcom
-  ac_add_string(ac, "TCA", 3, 4); //revcom
-  ac_add_string(ac, "CTA", 3, 5); //revcom
+  ac_add_string(ac, "TAA", 3, 1);
+  ac_add_string(ac, "TGA", 3, 2);
+  ac_add_string(ac, "TAG", 3, 3);
+  ac_add_string(ac, "TTA", 3, 4); //revcom
+  ac_add_string(ac, "TCA", 3, 5); //revcom
+  ac_add_string(ac, "CTA", 3, 6); //revcom
   ac_prep(ac);
   char *search_result;
   int length_out, id_out, ends_at;
@@ -146,14 +144,26 @@ void process_sequence_file(char *path, int min_length, char* codonTable){
       //find the frame of the position using mod 3 operation
       length_to_string_start = search_result - seq->seq.s;
       mod3 = length_to_string_start % 3;
+//       printf("Found potential ORF at position %i given found string id %i. Current positions are %i,%i,%i %i,%i,%i and mod3 %i from total sequence length %i and ORF length %i\n",
+//              length_to_string_start,
+//              id_out,
+//              last_found_positions[0],
+//              last_found_positions[1],
+//              last_found_positions[2],
+//              last_found_positions[3],
+//              last_found_positions[4],
+//              last_found_positions[5],
+//              mod3,
+//              (int)seq->seq.l,
+//              length_to_string_start - last_found_positions[mod3]
+//             );
 
       //if current position - last position >= min_length, translate and spit out translated sequence
-      if (id_out < 3) {
+      if (id_out <= 3) {
         //in fwd direction is this ORF
         if (length_to_string_start - last_found_positions[mod3] >= min_length){
           //spit out sequence
           print_sequence_header(seq, last_found_positions[mod3], mod3+1, &orf_counter);
-          //printf(">%s_%i\n", seq->name.s, orf_counter++);
           translate(seq->seq.s+last_found_positions[mod3],
                          length_to_string_start - last_found_positions[mod3],
                          false, codonTable);
@@ -162,11 +172,11 @@ void process_sequence_file(char *path, int min_length, char* codonTable){
         last_found_positions[mod3] = length_to_string_start+3;
 
       } else { //if id of ac hit is 3 or more, spit out the reverse complement
-        if (length_to_string_start - last_found_positions[mod3] >= min_length){
+        if (length_to_string_start - last_found_positions[mod3+3] >= min_length){
           //spit out revcom sequence
           print_sequence_header(seq, last_found_positions[mod3+3], mod3+4, &orf_counter);
-          translate(seq->seq.s+last_found_positions[mod3],
-                         length_to_string_start - last_found_positions[mod3],
+          translate(seq->seq.s+last_found_positions[mod3+3],
+                         length_to_string_start - last_found_positions[mod3+3],
                          true, codonTable);
 
         }
@@ -285,13 +295,13 @@ int main(int argc, char *argv[]){
   char c;
   char* codonTable = codonTable1;
 
-  while ((c = getopt (argc, argv, "hm:t:")) != -1){
+  while ((c = getopt (argc, argv, "hm:")) != -1){
     switch (c){
       case 'h':
-        printf("  Usage: orfm [options] <seq_file>\n\n");
+        printf("\n  Usage: orfm [options] <seq_file>\n\n");
+        printf("  The <seq_file> can be a FASTA or FASTQ file, gzipped or uncompressed.\n\n");
         printf("  Options:\n");
         printf("   -m LENGTH   minimum number of nucleotides (not amino acids) to call an ORF on [default: %i]\n", min_length);
-        printf("   -t TABLE    translation table (only 1 and 11 supported currently) [default 1]\n");
         printf("   -h          show this help\n");
         printf("\n");
         exit(0);
@@ -304,13 +314,6 @@ int main(int argc, char *argv[]){
         if (min_length % 3 != 0){
           fprintf(stderr, "ERROR: -m minimum length argument must be a multiple of 3\n");
           exit(2);
-        }
-        break;
-      case 't':
-        if (strcmp(optarg, "1")==0){
-          codonTable = codonTable1;
-        } else if (strcmp(optarg, "11")==0){
-          codonTable = codonTable11;
         }
         break;
     }
