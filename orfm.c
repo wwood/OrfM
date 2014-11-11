@@ -23,54 +23,78 @@ char codonTable1[64] = {
 inline char translate_codon(char* codon, char* codonTable){
   int i;
   int index=0;
+  bool is_n = false;
   for (i=0; i<=2; i++){
     switch (codon[i]){
       case 'A':
+      case 'a':
         break;
       case 'C':
+      case 'c':
         index += 1 << ((2-i)*2);
         break;
       case 'G':
+      case 'g':
         index += 2 << ((2-i)*2);
         break;
       case 'T':
+      case 't':
         index += 3 << ((2-i)*2);
+        break;
+      case 'N':
+      case 'n':
+        is_n = true;
         break;
       default:
         fprintf(stderr, "Detected unexcepted codon: %s\n", codon);
         exit(1);
     }
   }
-  //printf("index: %i\n", index);
 
-  return codonTable[index];
+  if (is_n){
+    return 'X';
+  } else {
+    return codonTable[index];
+  }
 }
 
 
 inline char translate_codon_revcom(char* codon, char* codonTable){
   int i;
   int index=0;
+  bool is_n = false;
   for (i=0; i<=2; i++){
     switch (codon[i]){
       case 'A':
+      case 'a':
         index += 3 << (i*2);
         break;
       case 'C':
+      case 'c':
         index += 2 << (i*2);
         break;
       case 'G':
+      case 'g':
         index += 1 << (i*2);
         break;
       case 'T':
+      case 't':
+        break;
+      case 'N':
+      case 'n':
+        is_n = true;
         break;
       default:
-        fprintf(stderr, "Detected unexcepted codon: %c %s\n", *codon, codon);
+        fprintf(stderr, "Detected unexcepted codon: %s\n", codon);
         exit(1);
     }
   }
-  //printf("index: %i\n", index);
 
-  return codonTable[index];
+  if (is_n){
+    return 'X';
+  } else {
+    return codonTable[index];
+  }
 }
 
 
