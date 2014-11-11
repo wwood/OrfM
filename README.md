@@ -21,6 +21,23 @@ because this is the correct number for 100bp so that each of the 6 frames can be
 Using 99 would mean that the third frame forward (and the corresponding reverse frame) cannot 
 possibly returned as an ORF because this would entail it encapsulating bases 2-101, and 101>100.
 
+Output
+---
+The output ORFs fasta file contains any stretch of problems which does not include a stop codon. 
+There is no requirement for a start codon to be included in the ORF. One could say that OrfM is an ORF caller, not a gene caller (like say prodigal or genscan).
+
+The output ORFs are named in a straitforward manner. The name of the sequence (i.e. anything before a space) is followed by `_startPosition_frameNumber_orfNumber` and then 
+the comment of the sequence (i.e. anything after the space) is given after a space, if one exists. For example,
+```
+$ cat eg.fasta
+>abc|123|name some comment
+ATGTTA
+$ orfm -m 3 eg.fasta
+>abc|123|name_1_1_1 some comment
+ML
+```
+The `startPosition` of reverse frames is the left-most position in the original sequence, not the codon where the ORF starts.
+
 Not too slow
 -----
 It runs in reasonable time compared to e.g. `translate` from the `biosequid` package, `getorf` from the `emboss` toolkit, and `prodigal`, a more nuanced gene caller. For a 300MB compressed fastq file:
@@ -37,7 +54,7 @@ pigz -cd the.fq.gz |fq2fa |getorf -sequence /dev/stdin -minsize 33 -outseq >orfs
 pigz -cd 110811_E_1_D_nesoni_single.fq.gz |fq2fa |prodigal -q -p meta -i /dev/stdin -a 110811_E_1_D_nesoni_single.prodigal.faa -o /dev/null
   #=> 16 min 6 sec
 ```
-While `translate` is as fast as OrfM, it does not appear to be able to handle fastq files even on `stdin`, and does not output a standard FASTA format file.
+While `translate` is as fast as OrfM, it does not appear to be able to handle fastq files (even piped in on `stdin`), and does not output a standard FASTA format file.
 
 Contributing to OrfM
 ----
