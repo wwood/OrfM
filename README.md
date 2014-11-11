@@ -37,7 +37,7 @@ pigz -cd the.fq.gz |fq2fa |getorf -sequence /dev/stdin -minsize 33 -outseq >orfs
 pigz -cd 110811_E_1_D_nesoni_single.fq.gz |fq2fa |prodigal -q -p meta -i /dev/stdin -a 110811_E_1_D_nesoni_single.prodigal.faa -o /dev/null
   #=> 16 min 6 sec
 ```
-While `translate` is as fast as OrfM, it does not output a standard output, and does not appear to be able to handle fastq files even on `stdin`, and also does not output a standard fasta format file.
+While `translate` is as fast as OrfM, it does not appear to be able to handle fastq files even on `stdin`, and does not output a standard FASTA format file.
 
 Contributing to OrfM
 ----
