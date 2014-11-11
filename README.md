@@ -23,7 +23,7 @@ possibly returned as an ORF because this would entail it encapsulating bases 2-1
 
 Not too slow
 -----
-It runs in reasonable time compared to e.g. `translate` from the `biosequid` package, `getorf` from the `emboss` toolkit, and `prodigal` a more nuanced gene caller. For a 300MB compressed fastq file:
+It runs in reasonable time compared to e.g. `translate` from the `biosequid` package, `getorf` from the `emboss` toolkit, and `prodigal`, a more nuanced gene caller. For a 300MB compressed fastq file:
 ```
 orfm -m 33 the.fq.gz >orfs.fa
   #=> 42 seconds

@@ -86,4 +86,16 @@ FT
 EOS
     Bio::Commandeer.run("#{orfm} -m3", :stdin => input).should == expected
   end
+
+  it 'should be able to handle n characters' do
+    input = %w(>eg TTAANA).join("\n")
+    expected = %w(>eg_1_1_1 LX).join("\n")+"\n";
+    Bio::Commandeer.run("#{orfm} -m6", :stdin => input).should == expected
+  end
+
+  it 'should be able to handle lower case characters' do
+    input = %w(>eg TTAAaA).join("\n")
+    expected = %w(>eg_1_1_1 LK).join("\n")+"\n";
+    Bio::Commandeer.run("#{orfm} -m6", :stdin => input).should == expected
+  end
 end
