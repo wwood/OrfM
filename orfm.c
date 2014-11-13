@@ -326,7 +326,7 @@ int main(int argc, char *argv[]){
   while ((c = getopt (argc, argv, "hvm:")) != -1){
     switch (c){
       case 'v':
-        printf("OrfM version 0.1\n");
+        printf("OrfM version 0.1.1\n");
         exit(0);
       case 'h':
         printf("\n  Usage: orfm [options] <seq_file>\n\n");
