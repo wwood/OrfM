@@ -42,14 +42,14 @@ Not too slow
 -----
 It runs in reasonable time compared to e.g. `translate` from the `biosequid` package, `getorf` from the `emboss` toolkit, and `prodigal`, a more nuanced gene caller. For a 300MB compressed fastq file:
 ```
-orfm -m 33 the.fq.gz >orfs.fa
+orfm -m 33 the.fa >orfm.fa
   #=> 42 seconds
 
-translate -l 33 110811_E_1_D_nesoni_single.fa >110811_E_1_D_nesoni_single.biosquid.m33.fa
+translate -l 33 the.fa >biosquid.m33.txt
   #=> 43 seconds
   
-pigz -cd the.fq.gz |fq2fa |getorf -sequence /dev/stdin -minsize 33 -outseq >orfs.fa
-  #=> 3 min 17 sec
+getorf -sequence the.fa -minsize 33 -outseq getorf.fa
+  #=> 2 min 57 sec
 
 pigz -cd 110811_E_1_D_nesoni_single.fq.gz |fq2fa |prodigal -q -p meta -i /dev/stdin -a 110811_E_1_D_nesoni_single.prodigal.faa -o /dev/null
   #=> 16 min 6 sec

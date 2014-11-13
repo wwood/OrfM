@@ -154,6 +154,10 @@ void process_sequence_file(char *path, int min_length, char* codonTable){
   seq = kseq_init(fp);
 
   while ((l = kseq_read(seq)) >= 0) {
+    //if there is no chance of getting an ORF here, don't even start
+    if (seq->seq.l < min_length){
+      continue;
+    }
     //printf("Processing sequence %s\n",seq->seq.s);
 
     //set current positions for each of the frames
