@@ -104,4 +104,38 @@ EOS
     expected = %w(>eg_1_1_1 LK).join("\n")+"\n";
     Bio::Commandeer.run("#{orfm} -m6", :stdin => input).should == expected
   end
+
+  it 'should exit with non-zero status when -l < -m' do
+    input = %w(>eg TTAAaA).join("\n")
+    expect {
+      Bio::Commandeer.run("#{orfm} -l 3 -m6", :stdin => input).should == expected
+      }.to raise_exception
+  end
+
+  it 'should stop when it runs out of -l' do
+    input = %w(>eg TTAANAGGGGGGGGGG).join("\n")
+    expected = %w(>eg_1_1_1 LX).join("\n")+"\n";
+    Bio::Commandeer.run("#{orfm} -m6 -l6", :stdin => input).should == expected
+
+    expected = %w(>eg_1_1_1 LX >eg_2_5_2 XL).join("\n")+"\n";
+    Bio::Commandeer.run("#{orfm} -m6 -l7", :stdin => input).should == expected
+
+    expected = %w(>eg_1_1_1 LX >eg_3_3_2 XR >eg_2_5_3 XL >eg_3_6_4 PX).join("\n")+"\n";
+    Bio::Commandeer.run("#{orfm} -m6 -l8", :stdin => input).should == expected
+
+    expected = %w(>eg_1_1_1
+       LXGGG
+       >eg_5_2_2
+       XGGG
+       >eg_3_3_3
+       XRGG
+       >eg_4_4_4
+       PPPX
+       >eg_2_5_5
+       PPPXL
+       >eg_3_6_6
+       PPPX).join("\n")+"\n";
+    Bio::Commandeer.run("#{orfm} -m6 -l16", :stdin => input).should == expected
+    Bio::Commandeer.run("#{orfm} -m6 -l80", :stdin => input).should == expected
+  end
 end
