@@ -3,6 +3,12 @@ require 'bio-commandeer'
 
 orfm = File.expand_path(File.dirname(__FILE__) + '/../orfm')
 
+RSpec.configure do |config|
+  config.expect_with :rspec do |c|
+    c.syntax = [:should, :expect]
+  end
+end
+
 describe "orfm" do
   it "should run with defaults on a single file" do
     input = %w(>638202197:1-99 ATGGATGCTGAAAAAAGATTGTTCTTAAAGGCATTAAAGGAAAAGTTTGAAGAAGACCCAAGAGAAAAATACACTAAGTTCTATGTCTTTGGCGGATGG).join("\n")
