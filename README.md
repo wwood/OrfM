@@ -40,7 +40,7 @@ The `startPosition` of reverse frames is the left-most position in the original 
 
 Not too slow
 -----
-It runs in reasonable time compared to e.g. `translate` from the `biosequid` package, `getorf` from the `emboss` toolkit, and `prodigal`, a more nuanced gene caller. For a 300MB compressed fastq file:
+It runs in reasonable time compared to e.g. `translate` from Sean Eddy's `squid` (available as part of the Ubuntu  [biosquid package](https://launchpad.net/ubuntu/+source/biosquid)), `getorf` from the `emboss` toolkit, and `prodigal`, a more nuanced gene caller. For a 300MB compressed fastq file:
 ```
 orfm -m 33 the.fa >orfm.fa
   #=> 42 seconds
