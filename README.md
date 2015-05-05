@@ -48,7 +48,7 @@ Not too slow
 It runs in reasonable time compared to e.g. `translate` from Sean Eddy's `squid` (available as part of the Ubuntu  [biosquid package](https://launchpad.net/ubuntu/+source/biosquid)), `getorf` from the `emboss` toolkit, and `prodigal`, a more nuanced gene caller. For a 300MB compressed fastq file:
 ```
 orfm -m 96 the.fa >orfm.fa
-  #=> 11 seconds
+  #=> 7 seconds
 
 translate -l 32 the.fa >biosquid.m33.txt
   #=> 29 seconds
