@@ -1,1 +1,14 @@
 orfm
+
+.deps/
+Makefile.in
+aclocal.m4
+autom4te.cache/
+compile
+config.status
+configure
+depcomp
+ext/.deps/
+ext/.dirstamp
+install-sh
+missing
