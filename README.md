@@ -12,6 +12,8 @@ Or, you can install from source:
 ```sh
 git clone --recursive https://github.com/wwood/OrfM
 cd OrfM
+./autogen.sh
+./configure
 make
 ```
 
@@ -63,7 +65,15 @@ pigz -cd 110811_E_1_D_nesoni_single.fq.gz |fq2fa |prodigal -q -p meta -i /dev/st
 
 Contributing to OrfM
 ----
-Patches most welcome. There is a few tests, which can be tested after installing `ruby`, as well as the `rspec` and `bio-commandeer` rubygems.
+Patches most welcome. To get started:
+```sh
+git clone --recursive https://github.com/wwood/OrfM
+cd OrfM
+./autogen.sh
+./configure
+make
+```
+There is a few tests, which can be tested after installing `ruby`, as well as the `rspec` and `bio-commandeer` rubygems.
 ```sh
 make test
 ```
