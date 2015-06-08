@@ -6,7 +6,12 @@ of returning a FASTA file of open reading frames over a certain length from a FA
 
 Install
 ----
+Pre-compiled binaries are available at https://github.com/wwood/OrfM/releases
+
+Or, you can install from source:
 ```sh
+git clone --recursive https://github.com/wwood/OrfM
+cd OrfM
 make
 ```
 
@@ -23,7 +28,7 @@ possibly returned as an ORF because this would entail it encapsulating bases 2-1
 
 Output
 ---
-The output ORFs fasta file contains any stretch of problems which does not include a stop codon. 
+The output ORFs fasta file contains any stretch of continuous codons which does not include a stop codon. 
 There is no requirement for a start codon to be included in the ORF. One could say that OrfM is an ORF caller, not a gene caller (like say prodigal or genscan).
 
 The output ORFs are named in a straitforward manner. The name of the sequence (i.e. anything before a space) is followed by `_startPosition_frameNumber_orfNumber` and then 
@@ -40,21 +45,21 @@ The `startPosition` of reverse frames is the left-most position in the original 
 
 Not too slow
 -----
-It runs in reasonable time compared to e.g. `translate` from Sean Eddy's `squid` (available as part of the Ubuntu  [biosquid package](https://launchpad.net/ubuntu/+source/biosquid)), `getorf` from the `emboss` toolkit, and `prodigal`, a more nuanced gene caller. For a 300MB compressed fastq file:
+It runs in reasonable time compared to e.g. `translate` from Sean Eddy's `squid` (available as part of the Ubuntu  [biosquid package](https://launchpad.net/ubuntu/+source/biosquid)), `getorf` from the `emboss` toolkit, and `prodigal`, a more nuanced gene caller. For a 463MB fasta file of 100bp sequences:
 ```
-orfm -m 33 the.fa >orfm.fa
-  #=> 42 seconds
+orfm -m 96 the.fa >orfm.fa
+  #=> 7 seconds
 
-translate -l 33 the.fa >biosquid.m33.txt
-  #=> 43 seconds
+translate -l 32 the.fa >biosquid.m33.txt
+  #=> 29 seconds
   
-getorf -sequence the.fa -minsize 33 -outseq getorf.fa
-  #=> 2 min 57 sec
+getorf -sequence the.fa -minsize 96 -outseq getorf.fa
+  #=> 38 sec
 
 pigz -cd 110811_E_1_D_nesoni_single.fq.gz |fq2fa |prodigal -q -p meta -i /dev/stdin -a 110811_E_1_D_nesoni_single.prodigal.faa -o /dev/null
   #=> 16 min 6 sec
 ```
-While `translate` is as fast as OrfM, it does not appear to be able to handle fastq files (even piped in on `stdin`), and does not output a standard FASTA format file.
+`translate` also does not appear to be able to handle fastq files (even piped in on `stdin` as fasta), and does not output a standard FASTA format file.
 
 Contributing to OrfM
 ----
