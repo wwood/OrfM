@@ -12,3 +12,4 @@ ext/.deps/
 ext/.dirstamp
 install-sh
 missing
+Makefile
