@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <getopt.h>    /* for getopt */
+#include <string.h>
 
 #include <zlib.h>
 #include <seqtk/kseq.h>
@@ -322,17 +323,51 @@ void process_sequence_file(char *path, int min_length, char* codonTable, int pos
   gzclose(fp);
 }
 
+/* Return true if the current_version (i.e. ORFM_VERSION) is >= required_version.
+The input strings are modified. Not thread-safe since strtok is not thread-safe. */
+bool compare_version(char* required_version, char* current_version){
+  char *s1;
+  char *s2;
+  char *s3;
+  int r1, r2, r3, c1, c2, c3;
+  s1 = (char *) strtok(required_version, ".");
+  s2 = (char *) strtok(NULL, ".");
+  s3 = (char *) strtok(NULL, ".");
+  if (s1 == NULL || s2 == NULL || s3 == NULL || strtok(NULL, ".") != NULL){
+    fprintf(stderr, "Unexpected format of version string, I required something like 0.1.4\n");
+    exit(4);
+  }
+  r1 = atoi(s1);
+  r2 = atoi(s2);
+  r3 = atoi(s3);
+
+  char *current_version2 = malloc((1+strlen(current_version))*sizeof(char));
+  strcpy(current_version2, current_version);
+  c1 = atoi(strtok(current_version2, "."));
+  c2 = atoi(strtok(NULL, "."));
+  c3 = atoi(strtok(NULL, "."));
+  free(current_version2);
+
+  if (r1 < c1) return true;
+  else if (r1 > c1) return false;
+  if (r2 < c2) return true;
+  else if (r2 > c2) return false;
+  if (r3 <= c3) return true;
+  else return false;
+}
+
 
 int main(int argc, char *argv[]){
   int min_length = 96;
   char c;
   char* codonTable = codonTable1;
   int position_limit = 0;
+  char* required_version;
 
-  while ((c = getopt(argc, argv, "hvm:l:")) != -1){
+  while ((c = getopt(argc, argv, "hvm:l:r:")) != -1){
     switch (c){
       case 'v':
-        printf("OrfM version 0.2.0\n");
+        printf("OrfM version %s\n",ORFM_VERSION);
         exit(0);
       case 'h':
         printf("\n  Usage: orfm [options] <seq_file>\n\n");
@@ -342,6 +377,7 @@ int main(int argc, char *argv[]){
         printf("   -l LENGTH   ignore the sequence of the read beyond this, useful when comparing reads from with different read lengths [default: none]\n");
         printf("   -v          show version information\n");
         printf("   -h          show this help\n");
+        printf("   -r VERSION  do not run unless this version of OrfM is at least this version number (e.g. %s)\n",ORFM_VERSION);
         printf("\n");
         exit(0);
       case 'm':
@@ -361,6 +397,16 @@ int main(int argc, char *argv[]){
           fprintf(stderr, "ERROR: -l must be 3 or more\n");
           exit(1);
         }
+        break;
+      case 'r':
+        required_version = malloc((1+strlen(optarg))*sizeof(char));
+        strcpy(required_version, optarg);
+        if (!compare_version(required_version, ORFM_VERSION)){
+          fprintf(stderr, "ERROR: this version of OrfM is older than the required version; please upgrade OrfM\n");
+          free(required_version);
+          exit(3);
+        }
+        free(required_version);
         break;
     }
   }

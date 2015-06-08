@@ -138,4 +138,16 @@ EOS
     Bio::Commandeer.run("#{orfm} -m6 -l16", :stdin => input).should == expected
     Bio::Commandeer.run("#{orfm} -m6 -l80", :stdin => input).should == expected
   end
+
+  it 'should require versions as you would expect' do
+    vers = Bio::Commandeer.run("#{orfm} -v").strip.split(' ')[2].split('.').collect{|v| v.to_i}
+
+    input = %w(>eg TTAAaA).join("\n")
+    expect {Bio::Commandeer.run("#{orfm} -r #{vers[0]+1}.#{vers[1] }.#{vers[2] }", :stdin => input).should == expected}.to raise_exception
+    expect {Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1]+1}.#{vers[2] }", :stdin => input).should == expected}.to raise_exception
+    expect {Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1] }.#{vers[2]+1}", :stdin => input).should == expected}.to raise_exception
+    Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1] }.#{vers[2] }", :stdin => input).should == ''
+    Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1]-1}.#{vers[2] }", :stdin => input).should == ''
+    Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1]-1}.#{vers[2]+1}", :stdin => input).should == ''
+  end
 end

@@ -1,17 +1,25 @@
 CFLAGS := -O2 -Wall
 LIBRARIES := -lz
-VERSION := 0.2.0
+ORFM_VERSION := \"0.3.0\"
+
+DEF := -D ORFM_VERSION=$(ORFM_VERSION)
 
 all: orfm
 
 orfm: orfm.c
-	gcc $(CFLAGS) orfm.c ext/ac.c -Iext -o orfm $(LIBRARIES)
+	gcc $(CFLAGS) $(DEF) orfm.c ext/ac.c -Iext -o orfm $(LIBRARIES)
+
+clean:
+	rm -f orfm
+
+debug: clean
+	gcc $(CFLAGS) $(DEF) -g orfm.c ext/ac.c -Iext -o orfm $(LIBRARIES)
 
 test: orfm test/orfm_spec.rb
 	rspec test/orfm_spec.rb
 
 profile:
-	gcc $(CFLAGS) orfm.c ext/ac.c -Iext -o orfm_gprof $(LIBRARIES) -pg -g -fprofile-arcs -ftest-coverage
+	gcc $(CFLAGS) $(DEF) orfm.c ext/ac.c -Iext -o orfm_gprof $(LIBRARIES) -pg -g -fprofile-arcs -ftest-coverage
 
 static_linux:
 	mkdir -p orfm-$(VERSION)_Linux_x86_64
