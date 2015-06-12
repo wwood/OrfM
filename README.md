@@ -16,6 +16,10 @@ cd OrfM
 ./configure
 make
 ```
+Or, you can install through [guix](http://www.gnu.org/software/guix/):
+```
+guix package -i orfm
+```
 
 Running
 ----
