@@ -150,4 +150,19 @@ EOS
     Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1]-1}.#{vers[2] }", :stdin => input).should == ''
     Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1]-1}.#{vers[2]+1}", :stdin => input).should == ''
   end
+
+  it 'should accept bad codons' do
+    input = %w(>eg GYATCATAGGCCAGCCGCTGTCCAGATGCACCGGTTCATCTGCGTCAGACGACGATCTTCACCCGGTAACCCCCGCCGATCACCAGATACTCGGCCTCCCCGCGCAAAGGATGGCTCGGCAGCAGATCGTTGAAGAACAGGAGCTTCACGACCGGAACTTCGGTTTCGAGGATATAGGCACCGAACTGCCCCGCCTGCGTCCGGTCAGCGGAGAAAGAAACGATGTTGTTGAGACGCACGAGGATTTCCCGTCCGTTGCCGGCCCC).join("\n")
+    expected = %w(>eg_1_1_1
+       XS
+       >eg_2_2_2
+       XH
+       >eg_3_3_3
+       II
+       >eg_2_5_4
+       MX
+       >eg_3_6_5
+       YD).join("\n")+"\n";
+    Bio::Commandeer.run("#{orfm} -m6 -l8", :stdin => input).should == expected
+  end
 end

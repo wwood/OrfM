@@ -41,13 +41,10 @@ inline char translate_codon(char* codon, char* codonTable){
       case 't':
         index += 3 << ((2-i)*2);
         break;
-      case 'N':
-      case 'n':
+      default:
+        //this could be N or other crazy character like Y, just ignore them all
         is_n = true;
         break;
-      default:
-        fprintf(stderr, "Detected unexcepted codon: %s\n", codon);
-        exit(1);
     }
   }
 
@@ -85,8 +82,9 @@ inline char translate_codon_revcom(char* codon, char* codonTable){
         is_n = true;
         break;
       default:
-        fprintf(stderr, "Detected unexcepted codon: %s\n", codon);
-        exit(1);
+        //this could be N or other crazy character like Y, just ignore them all
+        is_n = true;
+        break;
     }
   }
 
