@@ -8,6 +8,9 @@ orfm_SOURCES= orfm.c ext/ac.c ext/ac.h ext/seqtk/kseq.h
 
 DEF := -D ORFM_VERSION=$(ORFM_VERSION)
 
+debug: clean
+	gcc $(CFLAGS) -g orfm.c ext/ac.c -Iext -o orfm $(LDFLAGS)
+
 test: orfm test/orfm_spec.rb
 	rspec test/orfm_spec.rb
 

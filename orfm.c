@@ -25,7 +25,7 @@ char* for_printing;
 
 void translate(char* begin, int num, bool reverse, char* codonTable){
 //   char* tmp = malloc(10000); printf("%s %i\n", strncpy(tmp, begin, num), reverse); free(tmp);
-  for_printing = realloc(for_printing, num/3);
+  for_printing = realloc(for_printing, (num/3) + 1);
   int j=0;
   if (reverse){
     num -= 3;
