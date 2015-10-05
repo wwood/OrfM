@@ -19,7 +19,6 @@ char codonTable1[64] = {
   'A', 'G', 'G', 'G', 'G', 'V', 'V', 'V', 'V', '*', 'Y', '*', 'Y',
   'S', 'S', 'S', 'S', '*', 'C', 'W', 'C', 'L', 'F', 'L', 'F'};
 
-
 inline char translate_codon(char* codon, char* codonTable){
   int i;
   int index=0;
@@ -54,7 +53,6 @@ inline char translate_codon(char* codon, char* codonTable){
     return codonTable[index];
   }
 }
-
 
 inline char translate_codon_revcom(char* codon, char* codonTable){
   int i;
@@ -95,21 +93,28 @@ inline char translate_codon_revcom(char* codon, char* codonTable){
   }
 }
 
+char* for_printing;
+
 
 void translate(char* begin, int num, bool reverse, char* codonTable){
 //   char* tmp = malloc(10000); printf("%s %i\n", strncpy(tmp, begin, num), reverse); free(tmp);
+  for_printing = realloc(for_printing, num/3);
+  int j=0;
   if (reverse){
     num -= 3;
     for(;num >= 0; num-=3){
-      putchar(translate_codon_revcom(begin+num, codonTable));
+      for_printing[j] = translate_codon_revcom(begin+num, codonTable);
+      j++;
     }
   } else {
     int i;
     for(i=0; i<num; i+=3){
-      putchar(translate_codon(begin+i, codonTable));
+      for_printing[j] = translate_codon(begin+i, codonTable);
+      j++;
     }
   }
-  puts("");
+  for_printing[j] = 0;
+  puts(for_printing);
 }
 
 inline void print_sequence_header(kseq_t* seq_struct, int start_position, int frame, int *orf_counter){
@@ -137,6 +142,8 @@ void process_sequence_file(char *path, int min_length, char* codonTable, int pos
   int length_out, id_out, ends_at;
   int mod3;
   int length_to_string_start;
+
+  for_printing = (char *) malloc(1);
 
   //setup kseq reading
   gzFile fp;
@@ -316,6 +323,7 @@ void process_sequence_file(char *path, int min_length, char* codonTable, int pos
   } //onto next sequence
 
   //cleanup
+  free(for_printing);
   kseq_destroy(seq);
   ac_free(ac);
   gzclose(fp);
