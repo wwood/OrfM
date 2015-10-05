@@ -19,79 +19,6 @@ char codonTable1[64] = {
   'A', 'G', 'G', 'G', 'G', 'V', 'V', 'V', 'V', '*', 'Y', '*', 'Y',
   'S', 'S', 'S', 'S', '*', 'C', 'W', 'C', 'L', 'F', 'L', 'F'};
 
-inline char translate_codon(char* codon, char* codonTable){
-  int i;
-  int index=0;
-  bool is_n = false;
-  for (i=0; i<=2; i++){
-    switch (codon[i]){
-      case 'A':
-      case 'a':
-        break;
-      case 'C':
-      case 'c':
-        index += 1 << ((2-i)*2);
-        break;
-      case 'G':
-      case 'g':
-        index += 2 << ((2-i)*2);
-        break;
-      case 'T':
-      case 't':
-        index += 3 << ((2-i)*2);
-        break;
-      default:
-        //this could be N or other crazy character like Y, just ignore them all
-        is_n = true;
-        break;
-    }
-  }
-
-  if (is_n){
-    return 'X';
-  } else {
-    return codonTable[index];
-  }
-}
-
-inline char translate_codon_revcom(char* codon, char* codonTable){
-  int i;
-  int index=0;
-  bool is_n = false;
-  for (i=0; i<=2; i++){
-    switch (codon[i]){
-      case 'A':
-      case 'a':
-        index += 3 << (i*2);
-        break;
-      case 'C':
-      case 'c':
-        index += 2 << (i*2);
-        break;
-      case 'G':
-      case 'g':
-        index += 1 << (i*2);
-        break;
-      case 'T':
-      case 't':
-        break;
-      case 'N':
-      case 'n':
-        is_n = true;
-        break;
-      default:
-        //this could be N or other crazy character like Y, just ignore them all
-        is_n = true;
-        break;
-    }
-  }
-
-  if (is_n){
-    return 'X';
-  } else {
-    return codonTable[index];
-  }
-}
 
 char* for_printing;
 
@@ -103,13 +30,13 @@ void translate(char* begin, int num, bool reverse, char* codonTable){
   if (reverse){
     num -= 3;
     for(;num >= 0; num-=3){
-      for_printing[j] = translate_codon_revcom(begin+num, codonTable);
+      for_printing[j] = codonTable[ 128 + (*(begin+num+2)<<16) + (*(begin+num+1)<<8) + *(begin+num)];
       j++;
     }
   } else {
     int i;
     for(i=0; i<num; i+=3){
-      for_printing[j] = translate_codon(begin+i, codonTable);
+      for_printing[j] = codonTable[ (*(begin+i)<<16) + (*(begin+i+1)<<8) + *(begin+i+2)];
       j++;
     }
   }
@@ -123,6 +50,55 @@ inline void print_sequence_header(kseq_t* seq_struct, int start_position, int fr
   } else {
     printf(">%s_%i_%i_%i\n", seq_struct->name.s, start_position+1, frame, (*orf_counter)++);
   }
+}
+
+/** Create an index that maps 3 base codons (the bits from 3 chars)
+    to the amino acid that they encode, with X for non-DNA bases.
+    The reverse complements are encoded as +128 since A, T, G, C, a, t, g, c are
+    all less than 128 bits.
+    */
+char* create_codon_table(char* input_codon_table){
+  int table_size = (1<<8)*(1<<8)*(1<<8) * sizeof(char); //3 bases per codon indexed to another char
+  //printf("table size %i\n", table_size);
+  char* faster_table = (char*) malloc(table_size);
+
+  char* order = "ACGT";
+  char* low_order = "acgt";
+  char* complements = "TGCA";
+  char* low_complements = "tgca";
+  int i,j,k,count;
+  for (i=0; i<table_size; i++)
+    faster_table[i] = 'X';
+  count = 0;
+  for (i=0; i<4; i++){
+    for (j=0; j<4; j++){
+      for (k=0; k<4; k++){
+        //fwd
+        faster_table[(order[i]<<16) + (order[j]<<8) + order[k]] = input_codon_table[count];
+        faster_table[(order[i]<<16) + (order[j]<<8) + low_order[k]] = input_codon_table[count];
+        faster_table[(order[i]<<16) + (low_order[j]<<8) + order[k]] = input_codon_table[count];
+        faster_table[(order[i]<<16) + (low_order[j]<<8) + low_order[k]] = input_codon_table[count];
+        faster_table[(low_order[i]<<16) + (low_order[j]<<8) + order[k]] = input_codon_table[count];
+        faster_table[(low_order[i]<<16) + (low_order[j]<<8) + low_order[k]] = input_codon_table[count];
+        faster_table[(low_order[i]<<16) + (order[j]<<8) + order[k]] = input_codon_table[count];
+        faster_table[(low_order[i]<<16) + (order[j]<<8) + low_order[k]] = input_codon_table[count];
+
+        //encode the reverse complement of the codon matching to the same amino acid
+        faster_table[128 + (complements[i]<<16) + (complements[j]<<8) + complements[k]] = input_codon_table[count];
+        faster_table[128 + (complements[i]<<16) + (complements[j]<<8) + low_complements[k]] = input_codon_table[count];
+        faster_table[128 + (complements[i]<<16) + (low_complements[j]<<8) + complements[k]] = input_codon_table[count];
+        faster_table[128 + (complements[i]<<16) + (low_complements[j]<<8) + low_complements[k]] = input_codon_table[count];
+        faster_table[128 + (low_complements[i]<<16) + (complements[j]<<8) + complements[k]] = input_codon_table[count];
+        faster_table[128 + (low_complements[i]<<16) + (complements[j]<<8) + low_complements[k]] = input_codon_table[count];
+        faster_table[128 + (low_complements[i]<<16) + (low_complements[j]<<8) + complements[k]] = input_codon_table[count];
+        faster_table[128 + (low_complements[i]<<16) + (low_complements[j]<<8) + low_complements[k]] = input_codon_table[count];
+
+        count += 1;
+      }
+    }
+  }
+
+  return faster_table;
 }
 
 
@@ -158,6 +134,7 @@ void process_sequence_file(char *path, int min_length, char* codonTable, int pos
   int l;
   seq = kseq_init(fp);
   int read_position_limit;
+  codonTable = create_codon_table(codonTable);
 
   while ((l = kseq_read(seq)) >= 0) {
     //if there is no chance of getting an ORF here, don't even start
@@ -323,6 +300,7 @@ void process_sequence_file(char *path, int min_length, char* codonTable, int pos
   } //onto next sequence
 
   //cleanup
+  free(codonTable);
   free(for_printing);
   kseq_destroy(seq);
   ac_free(ac);
