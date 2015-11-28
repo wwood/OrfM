@@ -1,5 +1,6 @@
 require 'rspec'
 require 'bio-commandeer'
+require 'tempfile'
 
 orfm = File.expand_path(File.dirname(__FILE__) + '/../orfm')
 
@@ -75,7 +76,6 @@ EOS
 
   it 'should toy example with internal frame 2 ORF' do
     input = %w(>eg AATGTGAA).join("\n")
-    expected = %w(>eg_2_2_1 M).join("\n");
     expected = <<EOS
 >eg_2_2_1
 M
@@ -164,5 +164,43 @@ EOS
        >eg_3_6_5
        YD).join("\n")+"\n";
     Bio::Commandeer.run("#{orfm} -m6 -l8", :stdin => input).should == expected
+  end
+
+  it 'should give the right transcripts' do
+    input = %w(>eg AATGTGAA).join("\n")
+    expected = %w(>eg_2_2_1
+        ATG
+        >eg_1_1_2
+        AATGTG
+        >eg_3_3_3
+        TGTGAA
+        >eg_1_4_4
+        CACATT
+        >eg_2_5_5
+        TCACAT
+        >eg_3_6_6
+        TTCACA)
+    Tempfile.open("orfm_testing") do |t|
+      Bio::Commandeer.run("#{orfm} -m3 -t #{t.path}", :stdin => input)
+      File.open(t.path).read.split("\n").should == expected
+    end
+  end
+
+  it 'should handle odd chars in transcript output' do
+    input = %w(>eg GYATCATAGGCCAGCCGCTGTCCAGATGCACCGGTTCATCTGCGTCAGACGACGATCTTCACCCGGTAACCCCCGCCGATCACCAGATACTCGGCCTCCCCGCGCAAAGGATGGCTCGGCAGCAGATCGTTGAAGAACAGGAGCTTCACGACCGGAACTTCGGTTTCGAGGATATAGGCACCGAACTGCCCCGCCTGCGTCCGGTCAGCGGAGAAAGAAACGATGTTGTTGAGACGCACGAGGATTTCCCGTCCGTTGCCGGCCCC).join("\n")
+    expected = %w(>eg_1_1_1
+       GYATCA
+       >eg_2_2_2
+       YATCAT
+       >eg_3_3_3
+       ATCATA
+       >eg_2_5_4
+       ATGATN
+       >eg_3_6_5
+       TATGAT)
+    Tempfile.open("orfm_testing") do |t|
+      Bio::Commandeer.run("#{orfm} -t #{t.path} -m6 -l8", :stdin => input)
+      File.open(t.path).read.split("\n").should == expected
+    end
   end
 end
