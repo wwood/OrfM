@@ -4,14 +4,14 @@ CFLAGS= -O2 -Wall -D ORFM_VERSION=\"$(VERSION)\" -Iext
 LDFLAGS= -lz
 
 bin_PROGRAMS=orfm
-orfm_SOURCES= orfm.c ext/ac.c ext/ac.h ext/seqtk/kseq.h test/orfm_spec.rb
+orfm_SOURCES= src/orfm.c ext/ac.c ext/ac.h ext/seqtk/kseq.h test/orfm_spec.rb
 
 DEF := -D ORFM_VERSION=$(ORFM_VERSION)
 
 debug: clean
-	gcc $(CFLAGS) -g orfm.c ext/ac.c -Iext -o orfm $(LDFLAGS)
+	gcc $(CFLAGS) -g src/orfm.c ext/ac.c -Iext -o orfm $(LDFLAGS)
 
-test: orfm test/orfm_spec.rb
+check: orfm test/orfm_spec.rb
 	rspec test/orfm_spec.rb
 
 profile:

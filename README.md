@@ -8,13 +8,15 @@ Install
 ----
 Pre-compiled binaries are available at https://github.com/wwood/OrfM/releases
 
-Or, you can install from source:
+To install from source, follow the usual protocol:
 ```sh
-git clone --recursive https://github.com/wwood/OrfM
-cd OrfM
-./autogen.sh
+tar xzf orfm-x.x.x.tar.gz
+cd orfm-x.x.x
 ./configure
 make
+make check #requires Ruby and as well as the `rspec` and `bio-commandeer` rubygems.
+sudo make install
+orfm -h
 ```
 Or, you can install through [guix](http://www.gnu.org/software/guix/):
 ```
@@ -75,11 +77,7 @@ git clone --recursive https://github.com/wwood/OrfM
 cd OrfM
 ./autogen.sh
 ./configure
-make
-```
-There is a few tests, which can be tested after installing `ruby`, as well as the `rspec` and `bio-commandeer` rubygems.
-```sh
-make test
+make check
 ```
 
 Credits
