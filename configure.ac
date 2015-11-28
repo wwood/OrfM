@@ -4,7 +4,7 @@
 AC_PREREQ([2.69])
 AC_INIT([orfm], [0.5.0], [uq.edu.au after b.woodcroft ok])
 AM_INIT_AUTOMAKE([subdir-objects])
-AC_CONFIG_SRCDIR([orfm.c])
+AC_CONFIG_SRCDIR([orfm.c codon_tables.c])
 
 # Checks for programs.
 AC_PROG_CC
