@@ -221,4 +221,8 @@ EOS
         FT)
     Bio::Commandeer.run("#{orfm} -m3 -c4", :stdin => input).split("\n").should == expected
   end
+
+  it 'should deal with stop codons where the reverse complement is also a stop codon' do
+    fail "need to do this to properly use tables 22 and 23"
+  end
 end

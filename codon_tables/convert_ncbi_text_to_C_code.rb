@@ -58,6 +58,16 @@ print_table = lambda do
   puts "};"
 
   table_names[current_table_number] = table_name
+
+  # look for revcom that are the same as fwd - please no!
+  #binding.pry if current_table_number == 6
+  fwds = current_table.select{|codon, aa| aa=='*'}.keys
+  fwds.each do |codon|
+    if fwds.include?(codon.tr('ATGC','TACG').reverse)
+      $stderr.puts "Gah on #{codon} in table #{current_table_number}"
+      exit 1
+    end
+  end
 end
 
 
