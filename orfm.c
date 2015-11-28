@@ -9,19 +9,18 @@
 
 #include <ac.h>
 
+#include "codon_tables.c"
+
 KSEQ_INIT(gzFile, gzread)
-
-
-char codonTable1[64] = {
-  'K', 'N', 'K', 'N', 'T', 'T', 'T', 'T', 'R', 'S', 'R', 'S', 'I',
-  'I', 'M', 'I', 'Q', 'H', 'Q', 'H', 'P', 'P', 'P', 'P', 'R', 'R',
-  'R', 'R', 'L', 'L', 'L', 'L', 'E', 'D', 'E', 'D', 'A', 'A', 'A',
-  'A', 'G', 'G', 'G', 'G', 'V', 'V', 'V', 'V', '*', 'Y', '*', 'Y',
-  'S', 'S', 'S', 'S', '*', 'C', 'W', 'C', 'L', 'F', 'L', 'F'};
-
 
 char* for_printing;
 char* revcom_lookup_table;
+
+typedef struct {
+  AC_STRUCT * ac;
+  int num_stop_codons;
+  char** stop_codons;
+} stop_codon_search_data;
 
 void translate(char* begin, int num, bool reverse, char* codonTable){
 //   char* tmp = malloc(10000); printf("%s %i\n", strncpy(tmp, begin, num), reverse); free(tmp);
@@ -157,22 +156,75 @@ char* create_revcom_lookup_table(){
 }
 
 
+stop_codon_search_data* create_stop_codon_search_structure(char* codonTable, char* revcom_lookup_table){
+  stop_codon_search_data* data = malloc(sizeof(stop_codon_search_data));
+
+  data->ac = ac_alloc();
+
+  //first work out how many stop codons there are
+  int stop_codon_count = 0;
+  int i=0;
+  for (i=0; i<64; i++){
+    if (codonTable[i] == '*')
+      stop_codon_count++;
+  }
+  data->num_stop_codons = stop_codon_count;
+
+  // search through the array, searching for stop codons. Add the corresponding codon
+  // to the search structure
+  i=0;
+  stop_codon_count = 0;
+  char* order = "ACGT";
+  char codon[3];
+  int j,k,l;
+  for (j=0; j<4; j++){
+    for (k=0; k<4; k++){
+      for (l=0; l<4; l++){
+        if (codonTable[i] == '*'){
+          stop_codon_count++;
+          codon[0] = order[j];
+          codon[1] = order[k];
+          codon[2] = order[l];
+          ac_add_string(data->ac, codon, 3, stop_codon_count);
+        }
+        i++;
+      }
+    }
+  }
+
+  //add the reverse complements
+  i=0;
+  for (j=0; j<4; j++){
+    for (k=0; k<4; k++){
+      for (l=0; l<4; l++){
+        if (codonTable[i] == '*'){
+          stop_codon_count++;
+          codon[2] = revcom_lookup_table[(int)order[j]];
+          codon[1] = revcom_lookup_table[(int)order[k]];
+          codon[0] = revcom_lookup_table[(int)order[l]];
+          ac_add_string(data->ac, codon, 3, stop_codon_count);
+        }
+        i++;
+      }
+    }
+  }
+
+  ac_prep(data->ac);
+  return data;
+}
+
+
 void process_sequence_file(char *path, int min_length, char* codonTable, int position_limit, char* output_transcript_path){
-  //create string searching structure made of stop codons in fwd mode
-  //create reverse searching structure
-  AC_STRUCT * ac;
-  ac = ac_alloc();
-  ac_add_string(ac, "TAA", 3, 1);
-  ac_add_string(ac, "TGA", 3, 2);
-  ac_add_string(ac, "TAG", 3, 3);
-  ac_add_string(ac, "TTA", 3, 4); //revcom
-  ac_add_string(ac, "TCA", 3, 5); //revcom
-  ac_add_string(ac, "CTA", 3, 6); //revcom
-  ac_prep(ac);
   char *search_result;
   int length_out, id_out, ends_at;
   int mod3;
   int length_to_string_start;
+
+  revcom_lookup_table = create_revcom_lookup_table();
+  stop_codon_search_data* data = create_stop_codon_search_structure(codonTable, revcom_lookup_table);
+  AC_STRUCT * ac = data->ac;
+  int num_stop_codons = data->num_stop_codons;
+  free(data);
 
   for_printing = (char *) malloc(1);
 
@@ -181,9 +233,8 @@ void process_sequence_file(char *path, int min_length, char* codonTable, int pos
     transcript_output_fp = fopen(output_transcript_path,"w");
     if (transcript_output_fp ==NULL){
       printf("Cannot open output transcript file '%s' for writing\n", output_transcript_path);
-      exit(1);
+      exit(5);
     }
-    revcom_lookup_table = create_revcom_lookup_table();
   }
 
   //setup kseq reading
@@ -240,7 +291,7 @@ void process_sequence_file(char *path, int min_length, char* codonTable, int pos
       //             );
 
       //if current position - last position >= min_length, translate and spit out translated sequence
-      if (id_out <= 3) {
+      if (id_out <= num_stop_codons) {
         //in fwd direction is this ORF
         if (length_to_string_start - last_found_positions[mod3] >= min_length){
           print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[mod3], length_to_string_start - last_found_positions[mod3], mod3+1);
@@ -385,12 +436,13 @@ bool compare_version(char* required_version, char* current_version){
 int main(int argc, char *argv[]){
   int min_length = 96;
   char c;
+  int table_number;
   char* codonTable = codonTable1;
   int position_limit = 0;
   char* required_version;
   char* output_transcript_path = NULL;
 
-  while ((c = getopt(argc, argv, "hvm:l:r:t:")) != -1){
+  while ((c = getopt(argc, argv, "hvm:l:r:t:c:")) != -1){
     switch (c){
       case 'v':
         printf("OrfM version %s\n",ORFM_VERSION);
@@ -402,6 +454,7 @@ int main(int argc, char *argv[]){
         printf("   -m LENGTH   minimum number of nucleotides (not amino acids) to call an ORF on [default: %i]\n", min_length);
         printf("   -t FILE     output nucleotide sequences of transcripts to this path [default: none]\n");
         printf("   -l LENGTH   ignore the sequence of the read beyond this, useful when comparing reads from with different read lengths [default: none]\n");
+        printf("   -c TABLE_ID codon table for translation (see http://www.ncbi.nlm.nih.gov/Taxonomy/taxonomyhome.html/index.cgi?chapter=tgencodes for details) [default: 1]\n");
         printf("   -v          show version information\n");
         printf("   -h          show this help\n");
         printf("   -r VERSION  do not run unless this version of OrfM is at least this version number (e.g. %s)\n",ORFM_VERSION);
@@ -434,6 +487,14 @@ int main(int argc, char *argv[]){
           exit(3);
         }
         free(required_version);
+        break;
+      case 'c':
+        table_number = atoi(optarg);
+        if (table_number < 1 || table_number > num_translation_tables || codonTableSuite[table_number] == NULL){
+          fprintf(stderr, "Invalid translation table specified\n");
+          exit(4);
+        }
+        codonTable = codonTableSuite[table_number];
         break;
       case 't':
         output_transcript_path = optarg;

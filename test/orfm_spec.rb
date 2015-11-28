@@ -203,4 +203,22 @@ EOS
       File.open(t.path).read.split("\n").should == expected
     end
   end
+
+  it 'should accept alternative codon tables' do
+    input = %w(>eg AATGTGAA).join("\n")
+    expected = %w(
+        >eg_1_1_1
+        NV
+        >eg_2_2_2
+        MW
+        >eg_3_3_3
+        CE
+        >eg_1_4_4
+        HI
+        >eg_2_5_5
+        SH
+        >eg_3_6_6
+        FT)
+    Bio::Commandeer.run("#{orfm} -m3 -c4", :stdin => input).split("\n").should == expected
+  end
 end
