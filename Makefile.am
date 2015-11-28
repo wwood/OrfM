@@ -15,10 +15,10 @@ check: orfm test/orfm_spec.rb
 	rspec test/orfm_spec.rb
 
 profile:
-	gcc $(CFLAGS) orfm.c ext/ac.c -Iext -o orfm_gprof $(LDFLAGS) -pg -g -fprofile-arcs -ftest-coverage
+	gcc $(CFLAGS) src/orfm.c ext/ac.c -Iext -o orfm_gprof $(LDFLAGS) -pg -g -fprofile-arcs -ftest-coverage
 
 static_linux:
 	mkdir -p orfm-$(VERSION)_Linux_x86_64
-	gcc $(CFLAGS) --static orfm.c ext/ac.c -Iext -o orfm-$(VERSION)_Linux_x86_64/orfm-$(VERSION)_Linux_x86_64 $(LDFLAGS)
+	gcc $(CFLAGS) --static src/orfm.c ext/ac.c -Iext -o orfm-$(VERSION)_Linux_x86_64/orfm-$(VERSION)_Linux_x86_64 $(LDFLAGS)
 	cd orfm-$(VERSION)_Linux_x86_64 && ln -s orfm-$(VERSION)_Linux_x86_64 orfm && cd -
 	tar czf orfm-$(VERSION)_Linux_x86_64.tar.gz orfm-$(VERSION)_Linux_x86_64

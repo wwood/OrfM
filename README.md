@@ -6,7 +6,7 @@ of returning a FASTA file of open reading frames over a certain length from a FA
 
 Install
 ----
-Pre-compiled binaries are available at https://github.com/wwood/OrfM/releases
+Source code and pre-compiled binaries are available at https://github.com/wwood/OrfM/releases
 
 To install from source, follow the usual protocol:
 ```sh
