@@ -223,6 +223,27 @@ EOS
   end
 
   it 'should deal with stop codons where the reverse complement is also a stop codon' do
-    fail "need to do this to properly use tables 22 and 23"
+    # input table 22: both tca and tga are stop codons
+    input = %w(>eg AAATCAAAA).join("\n")
+    expected = %w(
+        >eg_1_1_1
+K
+>eg_1_4_2
+F
+>eg_7_1_3
+K
+>eg_2_2_4
+NQ
+>eg_3_3_5
+IK
+>eg_7_4_6
+F
+>eg_2_5_7
+LI
+>eg_3_6_8
+FD
+)
+    e = Bio::Commandeer.run("#{orfm} -m3 -c22", :stdin => input).split("\n")
+    e.should == expected
   end
 end

@@ -41,33 +41,38 @@ current_table = nil
 current_table_number = 0
 table_names = {}
 
+codon_to_position = {}
+bases ="ACGT"
+codon_list = []
+order = bases.split('').collect do |c1|
+  bases.split('').collect do |c2|
+    bases.split('').collect do |c3|
+      k = "#{c1}#{c2}#{c3}"
+      codon_list.push k
+    end
+  end
+end.flatten
+codon_list.each_with_index do |codon, position|
+  codon_to_position[codon] = position
+end
+
 print_table = lambda do
   table_name = "codonTable#{current_table_number}"
   puts "char #{table_name}[] = {"
-  bases ="ACGT"
-  order = bases.split('').collect do |c1|
-    bases.split('').collect do |c2|
-      bases.split('').collect do |c3|
-        k = "#{c1}#{c2}#{c3}"
-        raise unless current_table.key?(k)
-        current_table[k]
-      end
+  order = codon_list.collect do |k|
+    raise unless current_table.key?(k)
+    #puts [k, current_table[k]].join(' ')
+    if current_table[k] == '*' and current_table[k.tr('ATGC','TACG').reverse] == '*'
+      $stderr.puts "Gah on #{k} in #{table_name}, fwd and rev are both stop codons"
+      '!'
+    else
+      current_table[k]
     end
-  end.flatten
+  end
   puts "    '"+order.join("', '")+"'"
   puts "};"
 
   table_names[current_table_number] = table_name
-
-  # look for revcom that are the same as fwd - please no!
-  #binding.pry if current_table_number == 6
-  fwds = current_table.select{|codon, aa| aa=='*'}.keys
-  fwds.each do |codon|
-    if fwds.include?(codon.tr('ATGC','TACG').reverse)
-      $stderr.puts "Gah on #{codon} in table #{current_table_number}"
-      exit 1
-    end
-  end
 end
 
 
