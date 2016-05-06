@@ -6,15 +6,20 @@ of returning a FASTA file of open reading frames over a certain length from a FA
 
 Install
 ----
-Source code and pre-compiled binaries are available at https://github.com/wwood/OrfM/releases
+OrfM can be installed by downloading pre-compiled versions available at https://github.com/wwood/OrfM/releases. Once you have downloaded the package, extract and run it e.g. for GNU/Linux:
+```sh
+tar xzf orfm-x.x.x_Linux_x86_64.tar.gz
+cd orfm-x.x.x_Linux_x86_64
+./orfm -h
+```
 
-To install from source, follow the usual protocol:
+If you desire, OrfM can also be installed from source; follow the usual protocol:
 ```sh
 tar xzf orfm-x.x.x.tar.gz
 cd orfm-x.x.x
 ./configure
 make
-make check #requires Ruby and as well as the `rspec` and `bio-commandeer` rubygems.
+make check #requires Ruby and as well as the `rspec` and `bio-commandeer` rubygems. This step is optional.
 sudo make install
 orfm -h
 ```
