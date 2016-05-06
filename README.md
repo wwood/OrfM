@@ -6,7 +6,7 @@ of returning a FASTA file of open reading frames over a certain length from a FA
 
 Install
 ----
-OrfM can be installed by downloading pre-compiled versions available at https://github.com/wwood/OrfM/releases. Once you have downloaded the package, extract and run it e.g. for GNU/Linux:
+OrfM can be installed in 3 ways. It can be installed by downloading pre-compiled versions available at https://github.com/wwood/OrfM/releases. Once you have downloaded the package, extract and run it e.g. for GNU/Linux:
 ```sh
 tar xzf orfm-x.x.x_Linux_x86_64.tar.gz
 cd orfm-x.x.x_Linux_x86_64
