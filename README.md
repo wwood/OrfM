@@ -6,23 +6,33 @@ of returning a FASTA file of open reading frames over a certain length from a FA
 
 Install
 ----
-OrfM can be installed in 3 ways. It can be installed by downloading pre-compiled versions available at https://github.com/wwood/OrfM/releases. Once you have downloaded the package, extract and run it e.g. for GNU/Linux:
+OrfM can be installed in 3 ways.
+### 1) Install from pre-compiled binaries
+OrfM can be installed by downloading pre-compiled binaries available at https://github.com/wwood/OrfM/releases. Once you have downloaded the package, extract and run it e.g. for GNU/Linux:
 ```sh
 tar xzf orfm-x.x.x_Linux_x86_64.tar.gz
 cd orfm-x.x.x_Linux_x86_64
 ./orfm -h
 ```
-
-If you desire, OrfM can also be installed from source. Download the `orfm-x.x.x.tar.gz` (_not_ the 'Source code') and then follow the usual protocol for compilation and installation:
+### 2) Install from source
+If you desire, OrfM can also be installed from source. Download the `orfm-x.x.x.tar.gz` from the [releases](https://github.com/wwood/OrfM/releases) page (_not_ the 'Source code' or the 'Download zip') and then follow the usual protocol for compilation and installation:
 ```sh
 tar xzf orfm-x.x.x.tar.gz
 cd orfm-x.x.x
 ./configure
 make
-make check #requires Ruby and as well as the `rspec` and `bio-commandeer` rubygems. This step is optional.
+```
+To run `make check` you need Ruby and as well as the `rspec` and `bio-commandeer` rubygems. This step is optional.
+```
+gem install rspec bio-commandeer # may require 'sudo'
+make check
+```
+Then finally to install OrfM
+```
 sudo make install
 orfm -h
 ```
+### 3) Install with GNU Guix
 Or, you can install through [guix](http://www.gnu.org/software/guix/):
 ```
 guix package -i orfm
