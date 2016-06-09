@@ -114,6 +114,6 @@ Software (c) Ben J. Woodcroft, released under LGPL - see the LICENSE.txt for lic
 
 A peer-reviewed manuscript describing OrfM has been published. If you use OrfM in your work then please help us out by citing it - thank you.
 
-Ben J. Woodcroft, Joel A. Boyd, and Gene W. Tyson. [_OrfM: A fast open reading frame predictor for metagenomic data_](http://bioinformatics.oxfordjournals.org/content/early/2016/05/01/bioinformatics.btw241.abstract). (2016).
+Ben J. Woodcroft, Joel A. Boyd, and Gene W. Tyson. [_OrfM: A fast open reading frame predictor for metagenomic data_](http://bioinformatics.oxfordjournals.org/content/early/2016/06/02/bioinformatics.btw241). (2016).
 Bioinformatics.
 
