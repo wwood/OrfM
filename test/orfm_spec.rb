@@ -246,4 +246,27 @@ FD
     e = Bio::Commandeer.run("#{orfm} -m3 -c22", :stdin => input).split("\n")
     e.should == expected
   end
+
+  it 'should only print ORFs with stop codons - no ORFs' do
+    input = %w(>eg AATGTGAA).join("\n")
+    Bio::Commandeer.run("#{orfm} -m3 -c4 -s", :stdin => input).split("\n").should == []
+  end
+
+  it 'should only print ORFs with stop codons - one ORF' do
+    input = %w(>eg AAATGA).join("\n")
+    expected = %w(
+        >eg_1_1_1
+        K)
+    Bio::Commandeer.run("#{orfm} -m3 -s", :stdin => input).split("\n").should == expected
+  end
+
+  it 'should only print ORFs with stop codons - more ORFs' do
+    input = %w(>eg ATGAAATGA).join("\n")
+    expected = %w(
+        >eg_1_1_1
+        MK
+        >eg_5_2_2
+        N)
+    Bio::Commandeer.run("#{orfm} -m3 -s", :stdin => input).split("\n").should == expected
+  end
 end
