@@ -109,7 +109,7 @@ EOS
     input = %w(>eg TTAAaA).join("\n")
     expect {
       Bio::Commandeer.run("#{orfm} -l 3 -m6", :stdin => input).should == expected
-      }.to raise_exception
+    }.to raise_exception(Bio::CommandFailedException)
   end
 
   it 'should stop when it runs out of -l' do
@@ -143,9 +143,9 @@ EOS
     vers = Bio::Commandeer.run("#{orfm} -v").strip.split(' ')[2].split('.').collect{|v| v.to_i}
 
     input = %w(>eg TTAAaA).join("\n")
-    expect {Bio::Commandeer.run("#{orfm} -r #{vers[0]+1}.#{vers[1] }.#{vers[2] }", :stdin => input).should == expected}.to raise_exception
-    expect {Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1]+1}.#{vers[2] }", :stdin => input).should == expected}.to raise_exception
-    expect {Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1] }.#{vers[2]+1}", :stdin => input).should == expected}.to raise_exception
+    expect {Bio::Commandeer.run("#{orfm} -r #{vers[0]+1}.#{vers[1] }.#{vers[2] }", :stdin => input).should == expected}.to raise_exception(Bio::CommandFailedException)
+    expect {Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1]+1}.#{vers[2] }", :stdin => input).should == expected}.to raise_exception(Bio::CommandFailedException)
+    expect {Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1] }.#{vers[2]+1}", :stdin => input).should == expected}.to raise_exception(Bio::CommandFailedException)
     Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1] }.#{vers[2] }", :stdin => input).should == ''
     Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1]-1}.#{vers[2] }", :stdin => input).should == ''
     Bio::Commandeer.run("#{orfm} -r #{vers[0] }.#{vers[1]-1}.#{vers[2]+1}", :stdin => input).should == ''
