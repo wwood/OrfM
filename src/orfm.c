@@ -581,15 +581,29 @@ int main(int argc, char *argv[]){
         printf("\n  Usage: orfm [options] <seq_file>\n\n");
         printf("  The <seq_file> can be a FASTA or FASTQ file, gzipped or uncompressed.\n\n");
         printf("  Options:\n");
-        printf("   -m LENGTH   minimum number of nucleotides (not amino acids) to call an ORF on [default: %i]\n", min_length);
-        printf("   -t FILE     output nucleotide sequences of transcripts to this path [default: none]\n");
-        printf("   -l LENGTH   ignore the sequence of the read beyond this, useful when comparing reads from with different read lengths [default: none]\n");
-        printf("   -c TABLE_ID codon table for translation (see http://www.ncbi.nlm.nih.gov/Taxonomy/taxonomyhome.html/index.cgi?chapter=tgencodes for details) [default: 1]\n");
-        printf("   -s          only print those ORFs in the same frame as a stop codon [default: off]\n");
+        printf("   -m LENGTH   minimum number of nucleotides (not amino acids) to call\n");
+        printf("               an ORF on [default: %i]\n", min_length);
+        printf("   -t FILE     output nucleotide sequences of transcripts to this path\n");
+        printf("               [default: none]\n");
+        printf("   -l LENGTH   ignore the sequence of the read beyond this, useful when\n");
+        printf("               comparing reads from with different read lengths\n");
+        printf("               [default: none]\n");
+        printf("   -c TABLE_ID codon table for translation (see \n");
+        printf("               http://www.ncbi.nlm.nih.gov/Taxonomy/taxonomyhome.html/index.cgi?chapter=tgencodes\n");
+        printf("               for details) [default: 1]\n");
+        printf("   -s          only print those ORFs in the same frame as a stop codon\n");
+        printf("               [default: off]\n");
+        printf("   -r VERSION  do not run unless this version of OrfM is at least this version\n");
+        printf("               number (e.g. %s)\n",ORFM_VERSION);
         printf("   -v          show version information\n");
         printf("   -h          show this help\n");
-        printf("   -r VERSION  do not run unless this version of OrfM is at least this version number (e.g. %s)\n",ORFM_VERSION);
         printf("\n");
+        printf("If you use OrfM in your research, thank you. If possible, can you please also\n");
+        printf("cite our publication?\n\n");
+        printf("  Ben J. Woodcroft, Joel A. Boyd, and Gene W. Tyson.\n");
+        printf("  OrfM: A fast open reading frame predictor for metagenomic data (2016).\n");
+        printf("  Bioinformatics. 32 (17): 2702-2703. doi:10.1093/bioinformatics/btw241.\n\n");
+
         exit(0);
       case 'm':
         min_length = atoi(optarg);
