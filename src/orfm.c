@@ -133,14 +133,14 @@ void translate(char* begin, int num, bool reverse, char* codonTable){
   puts(for_printing);
 }
 
-inline void print_sequence_header(kseq_t* seq_struct, int start_position, int frame, int orf_counter){
+static inline void print_sequence_header(kseq_t* seq_struct, int start_position, int frame, int orf_counter){
   if (seq_struct->comment.l > 0){
     printf(">%s_%i_%i_%i %s\n", seq_struct->name.s, start_position+1, frame, orf_counter, seq_struct->comment.s);
   } else {
     printf(">%s_%i_%i_%i\n", seq_struct->name.s, start_position+1, frame, orf_counter);
   }
 }
-inline void print_transcript_sequence_header(kseq_t* seq_struct, int start_position, int frame, int orf_counter, FILE* transcript_output_fp){
+static inline void print_transcript_sequence_header(kseq_t* seq_struct, int start_position, int frame, int orf_counter, FILE* transcript_output_fp){
   if (seq_struct->comment.l > 0){
     fprintf(transcript_output_fp, ">%s_%i_%i_%i %s\n", seq_struct->name.s, start_position+1, frame, orf_counter, seq_struct->comment.s);
   } else {
@@ -148,7 +148,7 @@ inline void print_transcript_sequence_header(kseq_t* seq_struct, int start_posit
   }
 }
 
-inline void print_sequence(kseq_t* sequence,
+static inline void print_sequence(kseq_t* sequence,
                            FILE* transcript_output_fp,
                            char* codonTable,
                            int *orf_counter,
