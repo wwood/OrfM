@@ -313,7 +313,7 @@ stop_codon_search_data* create_stop_codon_search_structure(char* codonTable, cha
 
 void process_sequence_file(char *path, int min_length, char* codonTable,
                            int position_limit, char* output_transcript_path,
-                           bool only_print_bounded_orfs){
+                           bool only_print_bounded_orfs, bool print_stop_codons){
   char *search_result;
   int length_out, id_out, ends_at;
   int mod3;
@@ -393,7 +393,9 @@ void process_sequence_file(char *path, int min_length, char* codonTable,
       if (id_out <= num_stop_codons) {
         //in fwd direction is this ORF
         if (length_to_string_start - last_found_positions[mod3] >= min_length){
-          print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[mod3], length_to_string_start - last_found_positions[mod3], mod3+1);
+          print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[mod3],
+                         length_to_string_start - last_found_positions[mod3] + (print_stop_codons ? 3 : 0),
+                         mod3+1);
         }
         //last_position[frame] = current_position (for next time)
         last_found_positions[mod3] = length_to_string_start+3;
@@ -401,19 +403,25 @@ void process_sequence_file(char *path, int min_length, char* codonTable,
       } else if (id_out < MAX_STOP_CODONS) { //if id of ac hit is 3 or more but not a stop codon in both directions, spit out the reverse complement
         if (length_to_string_start - last_found_positions[mod3+3] >= min_length){
           //spit out revcom sequence
-          print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[mod3+3], length_to_string_start - last_found_positions[mod3+3], mod3+4);
+          print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[mod3+3],
+                         length_to_string_start - last_found_positions[mod3+3] + (print_stop_codons ? 3 : 0),
+                         mod3+4);
         }
         last_found_positions[mod3+3] = length_to_string_start+3;
 
       } else {
         // Unusual codons like TCA and TGA are both stop codons and are reverse complements of each other. So print sequences in both directions.
         if (length_to_string_start - last_found_positions[mod3] >= min_length){
-          print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[mod3], length_to_string_start - last_found_positions[mod3], mod3+1);
+          print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[mod3],
+                         length_to_string_start - last_found_positions[mod3] + (print_stop_codons ? 3 : 0),
+                         mod3+1);
         }
         last_found_positions[mod3] = length_to_string_start+3;
         if (length_to_string_start - last_found_positions[mod3+3] >= min_length){
           //spit out revcom sequence
-          print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[mod3+3], length_to_string_start - last_found_positions[mod3+3], mod3+4);
+          print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[mod3+3],
+                         length_to_string_start - last_found_positions[mod3+3] + (print_stop_codons ? 3 : 0),
+                         mod3+4);
         }
         last_found_positions[mod3+3] = length_to_string_start+3;
       }
@@ -571,8 +579,9 @@ int main(int argc, char *argv[]){
   char* required_version;
   char* output_transcript_path = NULL;
   bool stop_codon_orfs = false;
+  bool print_stop_codons = false;
 
-  while ((c = getopt(argc, argv, "hvm:l:r:t:c:s")) != -1){
+  while ((c = getopt(argc, argv, "hvm:l:r:t:c:ps")) != -1){
     switch (c){
       case 'v':
         printf("OrfM version %s\n",ORFM_VERSION);
@@ -591,6 +600,8 @@ int main(int argc, char *argv[]){
         printf("   -c TABLE_ID codon table for translation (see \n");
         printf("               http://www.ncbi.nlm.nih.gov/Taxonomy/taxonomyhome.html/index.cgi?chapter=tgencodes\n");
         printf("               for details) [default: 1]\n");
+        printf("   -p          print the actual stop codons at sequence ends if encoded\n");
+        printf("               [default: do not]\n");
         printf("   -s          only print those ORFs in the same frame as a stop codon\n");
         printf("               [default: off]\n");
         printf("   -r VERSION  do not run unless this version of OrfM is at least this version\n");
@@ -644,6 +655,9 @@ int main(int argc, char *argv[]){
       case 't':
         output_transcript_path = optarg;
         break;
+      case 'p':
+        print_stop_codons = true;
+        break;
       case 's':
         stop_codon_orfs = true;
         break;
@@ -656,9 +670,13 @@ int main(int argc, char *argv[]){
   }
   //printf("Processing sequence file %s with min_length %i\n", argv[optind], min_length);
   if (argc-optind == 0){
-    process_sequence_file(NULL, min_length, codonTable, position_limit, output_transcript_path, stop_codon_orfs);
+    process_sequence_file(NULL, min_length, codonTable, position_limit,
+                          output_transcript_path, stop_codon_orfs,
+                          print_stop_codons);
   } else if (argc-optind == 1){
-    process_sequence_file(argv[optind], min_length, codonTable, position_limit, output_transcript_path, stop_codon_orfs);
+    process_sequence_file(argv[optind], min_length, codonTable, position_limit,
+                          output_transcript_path, stop_codon_orfs,
+                          print_stop_codons);
   } else {
     fprintf(stderr, "ERROR: one file at most can be given as an argument, found %i\n", argc-optind);
     exit(3);

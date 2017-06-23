@@ -269,4 +269,50 @@ FD
         N)
     Bio::Commandeer.run("#{orfm} -m3 -s", :stdin => input).split("\n").should == expected
   end
+
+  it 'should print stop codons' do
+    input = %w(>a ATGATGTAA).join("\n")
+    expected = %w(
+        >a_1_1_1
+        MM*
+        >a_3_3_2
+        DV
+        >a_1_4_3
+        LHH
+        >a_2_5_4
+        TS
+        >a_3_6_5
+        YI)
+    Bio::Commandeer.run("#{orfm} -m6 -p", :stdin => input).split("\n").should == expected
+  end
+
+  it 'should print stop codons in transcripts' do
+    input = %w(>a ATGATGTAA).join("\n")
+    expected_faa = %w(
+        >a_1_1_1
+        MM*
+        >a_3_3_2
+        DV
+        >a_1_4_3
+        LHH
+        >a_2_5_4
+        TS
+        >a_3_6_5
+        YI)
+    expected_fna = %w(
+        >a_1_1_1
+        ATGATGTAA
+        >a_3_3_2
+        GATGTA
+        >a_1_4_3
+        TTACATCAT
+        >a_2_5_4
+        ACATCA
+        >a_3_6_5
+        TACATC)
+    Tempfile.open("orfm_testing") do |t|
+      Bio::Commandeer.run("#{orfm} -m6 -p -t #{t.path}", :stdin => input).split("\n").should == expected_faa
+      File.open(t.path).read.split("\n").should == expected_fna
+    end
+  end
 end
