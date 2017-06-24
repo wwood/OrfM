@@ -9,6 +9,8 @@
 
 #include <ac.h>
 
+//#define DEBUGGING
+
 //not including double stop codons, but including revcomp ones
 #define MAX_STOP_CODONS 10
 
@@ -149,33 +151,42 @@ static inline void print_transcript_sequence_header(kseq_t* seq_struct, int star
 }
 
 static inline void print_sequence(kseq_t* sequence,
-                           FILE* transcript_output_fp,
-                           char* codonTable,
-                           int *orf_counter,
-                           bool is_reverse_direction,
-                           int start_position,
-                           int nucleotide_sequence_length,
-                           int frame){
+                                  FILE* transcript_output_fp,
+                                  char* codonTable,
+                                  int *orf_counter,
+                                  bool is_reverse_direction,
+                                  int start_position,
+                                  int nucleotide_sequence_length,
+                                  int frame,
+                                  bool print_stop_codons){
   // print transcripts if needed
+  #ifdef DEBUGGING
+  printf("%i\n", print_stop_codons);
+  #endif
   if (transcript_output_fp){
     print_transcript_sequence_header(sequence, start_position, frame, *orf_counter, transcript_output_fp);
     if (is_reverse_direction){
-      for_printing = realloc(for_printing, nucleotide_sequence_length);
+      // Always add 3 so stop codons fit in too, though not needed when
+      // print_stop_codons==false.
+      for_printing = realloc(for_printing, nucleotide_sequence_length+3);
       int i;
-      for (i=0; i<nucleotide_sequence_length; i++){
+      for (i = (print_stop_codons ? -3 : 0);
+           i<nucleotide_sequence_length; i++){
         for_printing[nucleotide_sequence_length-i-1] = revcom_lookup_table[(int)(sequence->seq.s[i+start_position])];
       }
-      fprintf(transcript_output_fp, "%.*s\n", nucleotide_sequence_length, for_printing);
+      fprintf(transcript_output_fp, "%.*s\n",
+              nucleotide_sequence_length + (print_stop_codons ? 3 : 0),
+              for_printing);
     } else {
       fprintf(transcript_output_fp, "%.*s\n",
-              nucleotide_sequence_length,
+              nucleotide_sequence_length + (print_stop_codons ? 3 : 0),
               sequence->seq.s+start_position);
     }
   }
   // print amino acids
   print_sequence_header(sequence, start_position, frame, *orf_counter);
-  translate(sequence->seq.s+start_position,
-            nucleotide_sequence_length,
+  translate(sequence->seq.s+start_position + ((print_stop_codons && is_reverse_direction) ? -3 : 0),
+            nucleotide_sequence_length + (print_stop_codons ? 3 : 0),
             is_reverse_direction, codonTable);
   // keep counting
   (*orf_counter)++;
@@ -394,8 +405,8 @@ void process_sequence_file(char *path, int min_length, char* codonTable,
         //in fwd direction is this ORF
         if (length_to_string_start - last_found_positions[mod3] >= min_length){
           print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[mod3],
-                         length_to_string_start - last_found_positions[mod3] + (print_stop_codons ? 3 : 0),
-                         mod3+1);
+                         length_to_string_start - last_found_positions[mod3],
+                         mod3+1, print_stop_codons);
         }
         //last_position[frame] = current_position (for next time)
         last_found_positions[mod3] = length_to_string_start+3;
@@ -404,8 +415,8 @@ void process_sequence_file(char *path, int min_length, char* codonTable,
         if (length_to_string_start - last_found_positions[mod3+3] >= min_length){
           //spit out revcom sequence
           print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[mod3+3],
-                         length_to_string_start - last_found_positions[mod3+3] + (print_stop_codons ? 3 : 0),
-                         mod3+4);
+                         length_to_string_start - last_found_positions[mod3+3],
+                         mod3+4, (print_stop_codons && last_found_positions[mod3+3] > 2));
         }
         last_found_positions[mod3+3] = length_to_string_start+3;
 
@@ -413,15 +424,15 @@ void process_sequence_file(char *path, int min_length, char* codonTable,
         // Unusual codons like TCA and TGA are both stop codons and are reverse complements of each other. So print sequences in both directions.
         if (length_to_string_start - last_found_positions[mod3] >= min_length){
           print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[mod3],
-                         length_to_string_start - last_found_positions[mod3] + (print_stop_codons ? 3 : 0),
-                         mod3+1);
+                         length_to_string_start - last_found_positions[mod3],
+                         mod3+1, print_stop_codons);
         }
         last_found_positions[mod3] = length_to_string_start+3;
         if (length_to_string_start - last_found_positions[mod3+3] >= min_length){
           //spit out revcom sequence
           print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[mod3+3],
-                         length_to_string_start - last_found_positions[mod3+3] + (print_stop_codons ? 3 : 0),
-                         mod3+4);
+                         length_to_string_start - last_found_positions[mod3+3],
+                         mod3+4, (print_stop_codons && last_found_positions[mod3+3] > 2));
         }
         last_found_positions[mod3+3] = length_to_string_start+3;
       }
@@ -431,16 +442,18 @@ void process_sequence_file(char *path, int min_length, char* codonTable,
 
     //then check for the last ORF in each of the frames
     mod3 = read_position_limit % 3;
-    //     printf("Final positions: %i,%i,%i %i,%i,%i and mod3 %i from length %i\n",
-    //            last_found_positions[0],
-    //            last_found_positions[1],
-    //            last_found_positions[2],
-    //            last_found_positions[3],
-    //            last_found_positions[4],
-    //            last_found_positions[5],
-    //            mod3,
-    //            (int)read_position_limit
-    //           );
+    #ifdef DEBUGGING
+    printf("Final positions: %i,%i,%i %i,%i,%i and mod3 %i from length %i\n",
+           last_found_positions[0],
+           last_found_positions[1],
+           last_found_positions[2],
+           last_found_positions[3],
+           last_found_positions[4],
+           last_found_positions[5],
+           mod3,
+           (int)read_position_limit
+           );
+    #endif
     switch (mod3){
       case 0:
         //translate each of the frames in order
@@ -448,79 +461,108 @@ void process_sequence_file(char *path, int min_length, char* codonTable,
         //for the 2,3,5,6th frames translate (length-last-3-{2,1})bp
         if ((l = read_position_limit - last_found_positions[0]) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[0] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[0], l, 1);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           false, last_found_positions[0], l, 1, false);
         }
         if ((l = read_position_limit - last_found_positions[1] - 2) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[1] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[1], l, 2);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           false, last_found_positions[1], l, 2, false);
         }
         if ((l = read_position_limit - last_found_positions[2] - 1) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[2] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[2], l, 3);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           false, last_found_positions[2], l, 3, false);
         }
         if ((l = read_position_limit - last_found_positions[3]) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[3] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[3], l, 4);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           true, last_found_positions[3], l, 4,
+                           // In revcom, this may be a first ORF that does have
+                           // a stop codon.
+                           (print_stop_codons && last_found_positions[3] > 2));
         }
         if ((l = read_position_limit - last_found_positions[4] - 2) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[4] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[4], l, 5);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           true, last_found_positions[4], l, 5,
+                           (print_stop_codons && last_found_positions[4] > 2));
         }
         if ((l = read_position_limit - last_found_positions[5] - 1) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[5] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[5], l, 6);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           true, last_found_positions[5], l, 6,
+                           (print_stop_codons && last_found_positions[5] > 2));
         }
         break;
       case 1:
         if ((l = read_position_limit - last_found_positions[0] - 1) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[0] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[0], l, 1);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           false, last_found_positions[0], l, 1, false);
         }
         if ((l = read_position_limit - last_found_positions[1]) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[1] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[1], l, 2);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           false, last_found_positions[1], l, 2, false);
         }
         if ((l = read_position_limit - last_found_positions[2] - 2) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[2] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[2], l, 3);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           false, last_found_positions[2], l, 3, false);
         }
         if ((l = read_position_limit - last_found_positions[3] - 1) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[3] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[3], l, 4);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           true, last_found_positions[3], l, 4,
+                           (print_stop_codons && last_found_positions[3] > 2));
         }
         if ((l = read_position_limit - last_found_positions[4]) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[4] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[4], l, 5);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           true, last_found_positions[4], l, 5,
+                           (print_stop_codons && last_found_positions[4] > 2));
         }
         if ((l = read_position_limit - last_found_positions[5] - 2) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[5] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[5], l, 6);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           true, last_found_positions[5], l, 6,
+                           (print_stop_codons && last_found_positions[5] > 2));
         }
         break;
       case 2:
         if ((l = read_position_limit - last_found_positions[0] - 2) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[0] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[0], l, 1);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           false, last_found_positions[0], l, 1, false);
         }
         if ((l = read_position_limit - last_found_positions[1] - 1) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[1] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[1], l, 2);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           false, last_found_positions[1], l, 2, false);
         }
         if ((l = read_position_limit - last_found_positions[2]) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[2] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, false, last_found_positions[2], l, 3);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           false, last_found_positions[2], l, 3, false);
         }
         if ((l = read_position_limit - last_found_positions[3] - 2) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[3] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[3], l, 4);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           true, last_found_positions[3], l, 4,
+                           (print_stop_codons && last_found_positions[3] > 2));
         }
         if ((l = read_position_limit - last_found_positions[4] - 1) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[4] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[4], l, 5);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           true, last_found_positions[4], l, 5,
+                           (print_stop_codons && last_found_positions[4] > 2));
         }
         if ((l = read_position_limit - last_found_positions[5]) >= min_length){
           if (only_print_bounded_orfs == false || last_found_positions[5] > 2)
-            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter, true, last_found_positions[5], l, 6);
+            print_sequence(seq, transcript_output_fp, codonTable, &orf_counter,
+                           true, last_found_positions[5], l, 6,
+                           (print_stop_codons && last_found_positions[5] > 2));
         }
         break;
     }

@@ -3,6 +3,7 @@ require 'bio-commandeer'
 require 'tempfile'
 
 orfm = File.expand_path(File.dirname(__FILE__) + '/../orfm')
+data = File.expand_path(File.dirname(__FILE__))
 
 RSpec.configure do |config|
   config.expect_with :rspec do |c|
@@ -270,7 +271,7 @@ FD
     Bio::Commandeer.run("#{orfm} -m3 -s", :stdin => input).split("\n").should == expected
   end
 
-  it 'should print stop codons' do
+  it 'should print stop codons fwd' do
     input = %w(>a ATGATGTAA).join("\n")
     expected = %w(
         >a_1_1_1
@@ -314,5 +315,188 @@ FD
       Bio::Commandeer.run("#{orfm} -m6 -p -t #{t.path}", :stdin => input).split("\n").should == expected_faa
       File.open(t.path).read.split("\n").should == expected_fna
     end
+  end
+
+  it 'should print stop codons in revcom at start' do
+    input = %w(>a_revcom TTACATCAT).join("\n")
+    expected = %w(
+        >a_revcom_1_1_1
+        LHH
+        >a_revcom_2_2_2
+        YI
+        >a_revcom_3_3_3
+        TS
+        >a_revcom_4_4_4
+        MM*
+        >a_revcom_2_5_5
+        DV)
+    Bio::Commandeer.run("#{orfm} -m6 -p", :stdin => input).split("\n").should == expected
+  end
+
+  it 'should print stop codons in revcom in middle' do
+    input = %w(>a_revcom AAAATTACATCAT).join("\n")
+    expected = %w(
+        >a_revcom_1_4_1
+        CNF
+        >a_revcom_1_1_2
+        KITS
+        >a_revcom_2_2_3
+        KLHH
+        >a_revcom_3_3_4
+        NYI
+        >a_revcom_8_5_5
+        MM*
+        >a_revcom_3_6_6
+        DVI)
+    Bio::Commandeer.run("#{orfm} -m6 -p", :stdin => input).split("\n").should == expected
+  end
+
+  it 'should give the same results as getorf' do
+    # getorf -sequence test/20_random100bp.fna -outseq /dev/stdout | grep -v '>' |sort
+    expected = %w(
+        AAISARLAITT
+        ADASVAMKTVWIPWHSFE
+        AFRAGHCLAQW
+        AIAVFSPSNFDAVTVLITVACLPFAWLSLYPN
+        ALLYRPPARGVTTWVLGRRRIHFEGENAVQGT
+        AMPSPKGSERVKCVNLSRLREKQVVEPG
+        ANFLESGGRTMVAGSLKSFYSSLVS
+        ARAQRLAFLSVGRGSRI
+        ASDRNEDSDSVEVTRREDSDR
+        ASNSLPRNTYV
+        ASYIRLLLQVERKLPLITLGKAMQCTDHLGDL
+        ATNVDTPADNNTCYVE
+        AVLPHDSMAISCMHLVHDRCVPATFPLLY
+        AVWTVTRPRPEEPCEHSRNSLRRREYPPVVELS
+        AYSFTFASKIRPCRS
+        CAKRSSVLHRPHRKVGTSYDKA
+        CKRGYEDGMDTMAQL
+        CPLNGVLTFKVDAPPPQNPCSHPSCWGSI
+        CPLSRGAPEDQLVPTGRGRGIWECIPDPAT
+        DKSPRWSVHCIAFPSVMSGNFRSTCNNNLM
+        DVNYWIVSSSVHS
+        EEPCRASLGLNEEHSVKGLLLVSKQHLF
+        EFGYRDSHANGRQATVMRTVTASKLLGEKTAIA
+        ELATTRPDLTSKSKTIC
+        FDGDFLYAPCSRSMRTGYIPTTL
+        FHCARQCPALKAQRESNA
+        FKAVPWYPYRLHSHACISLNSTTVYLMCGPCL
+        FLLSYVVGVIRTNVSHN
+        FPRCYRMVTRCHVARSKVYFVSIRLK
+        FQSCAMVSIPSS
+        FRRWGECFRWYTQVHAHRGRCAAVLDKRAGCL
+        FSGFLITVWVST
+        FSKLCHGIHTVFIATLASA
+        FTPRSMYYCPRAYQRSSPILGFGTTMCTSRDP
+        FTSYSAIKPLCVS
+        FYNRRVLTSAKRVTRMFARFFRPGPCDRPHS
+        GAAAEACVTYVTFSPVGSTVGTLRVSLRIASQ
+        GCVDGHTAQA
+        GILHQVVIASRAEIAAHHARESNAMHRPPRRFI
+        GPGSTTCFSLSRERFTHLTLSEPLGLGIA
+        GVAFTWHVTAKAAFHSLARPYATPVGVPDIC
+        HIVLLLLVRSGLVVASSYFPMWSV
+        HKAKDAYFLSESRKSWARSACSAKTSSSV
+        HVGSGTRGRPG
+        HVLLSAGVSTFVAYSRLWHNDVHQS
+        IARQFAGTLEEYLPYCQLVKRLHMSHRPLRQPR
+        IEWTLLLTIQ
+        ILVASPSLSAPRLSPMRPCMVPL
+        INIYLALQPGWRKAAPRNEKRPSRLHAM
+        INRLGGRCIALLSRA
+        IQTERCSLMIRWRFPVCTLFTIDAYRLHSHYST
+        IVRNVRPYYTDHIGK
+        KAAFAVTCHVNATP
+        KDLSEPATIVLPPLSRKLA
+        KDTPLSYRVRQHSGHDGHVLGCTIESTHPISER
+        KGYICHTGLCGSP
+        KLTSSKAVAELWSLVRLSPSIVLWFLNHSLGLH
+        KRHPALLSSTAAQRPRWACTWVYHRKHSPHLRK
+        KTPRSLIEYGSTAATMGMYLGVPSKALTPSPK
+        LCETFVRITPTT
+        LCGRSHGPGLKNRANIRVTLFADVSTLRL
+        LDATRCFCRTGGPRPRLSGLTQKVSILSLV
+        LGHDWCTSLCQSRE
+        LHGFWGGGASTLKVRTPFKGQ
+        LILQPEGTHVGEESYANVRTVLQAWAV
+        LIQNKPYYVPHDTA
+        LLLHVACIIVRGRINVRRLFSALAQRCAPVVTQ
+        LNSTTGGYSRRRRELRECSHGSSGLGRVTVHTA
+        LPRKRWQNYGRWFA
+        LQVSPAFLNRRVTTFGVRSSGHDLVPVDSRSLV
+        LRGNSQGHSKSTYRTANW
+        LRIVCPETHTFSRMGRQIHLSTLSTNPKRHRRF
+        LRNQRTIEGLKRTSDHSSATAFEEVS
+        LRQGLILLAKVKLYA
+        LRRCHCPHYGRLPTVRVAIPISEL
+        LSLERRSHLQSGCAASPKPM
+        LVPTFLCGRCNTDERFAQ
+        MFLQNRRTAPTTFWTHSESKHP
+        MLSHGYAVSCGT
+        NLRCLLGLVDRVLRWICRPMRLNVCVSGQTIRS
+        NLRVLGHDQSFLRRK
+        NQHISGTPTGVA
+        NRCCLDTSSKPFTECSSFKPNEALHGSS
+        PELLTPKVVTRRFRNAGETW
+        PGLNDLLFSQSGEVHAFDSL
+        PGLPRVPEPTCYYFRRKKLWS
+        PGSRLVHIVVPKPRIGDER
+        PRLHQLKLHNRLLNVRALLT
+        PRRPLFIPWRGLTPPRLECQIYVD
+        PVRIDREQGAYRKSPSNHEGAPLSLD
+        QGTEVDLPPHATKRMCFWADYSK
+        QRCYIDPQQEG
+        QRNHAGPHWA
+        RGCRRGLCDICNLFTSWQYGRYSSSVPANCLAI
+        RGLEYTPKCLFPDQ
+        RGTMQGLIGLKRGALSEGLATSI
+        RHLTSGCYCKSSGNCRSSRSGKQCNAPTT
+        RLRESQMREPLPTERKASR
+        RRSLSSLLVTSTLSLSSLRSLAYRSRGYPYIRT
+        RRYGYHGTALK
+        RVDATAHNPVVYVLFCHQATMCLLSYTVNRGS
+        SAQKHIRLVAWGGRSTSVPCQLTLKGIVD
+        SFGDGVSAFDGTPKYMPIVAAVLPYSIRERGVF
+        SGRYCSQSSSLRLILPSSHYVSLKLYR
+        SHGAADPPQYPVN
+        SPLLLGVYIATL
+        SRGFHISFLDAIAWLRGVMWHVVRFILYQLD
+        SSDIGIATRTVGKRP
+        SSGNVAGTHRS
+        SSGVWNTLPNASSPTSRYELVLWSTATQRALQR
+        STYIWHSNRGGVRPRQGMKSGLRGYMPCERYA
+        SVMPFESRCSRGPARTYWSGKRHLGVYSRPRY
+        TAFSPSKWMRRLPKTHVVTPLAGGLYSNA
+        TLLDVFAEQADRAHDFLDSLRK
+        TPSKRGDYMGFGEAAHPL
+        TRCIQEIAIES
+        TSDLESTGTRS
+        TVVEFKLMQAWL
+        TYVFLGRLFE
+        VAGSGIHSQMPLPRPVGTSWSSGAPRLKGHYR
+        VAVLQRTSSYLLVGEEAFGSVFQTPLL
+        VETQTVIKKPENYRRT
+        VLFECPCELPRN
+        VLSMVHPSTCPSWPLCCRTR
+        VMTRASYAESSNTSVQERGGDLE
+        VQKVVGAVRLFCKNI
+        VRAGPLEHRDSKGITE
+        VSKARTLSKRLWSLS
+        VSPESRGRGPPVLQKHLVASS
+        VVGALHCFPERDERQFPLDLQ
+        WECSRYASIVNKVHTGNRHRIMREHRSVWI
+        WLDGRIRRKLLDCEQ
+        WRSVHMACNREGRFSFLGAALRHPGWSARYMLI
+        WVTTGAHRCAKAENRRRTLIRPRTIIHATWSK
+        YCEAIRRDTRRVPTVLPTGEKVTYVTQASAAAP
+        YKINLTTCHMTPRNHAIASRKLM
+        YLNSIYSRMGM)
+    out = Bio::Commandeer.run("#{orfm} -m30 #{File.join(data,'20_random100bp.fna')}").split("\n")
+    out2 = out.select { |l| l[0]!='>' }.sort
+    out2.should == expected
+
+    out = Bio::Commandeer.run("#{orfm} -m30 -p #{File.join(data,'20_random100bp.fna')}").split("\n")
+    out2 = out.select { |l| l[0]!='>' }.collect { |l| l.gsub('*','') }.sort
+    out2.should == expected
   end
 end

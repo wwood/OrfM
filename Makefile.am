@@ -4,7 +4,7 @@ CFLAGS= -O2 -Wall -D ORFM_VERSION=\"$(VERSION)\" -Iext
 LDFLAGS= -lz
 
 bin_PROGRAMS=orfm
-orfm_SOURCES= src/orfm.c ext/ac.c ext/ac.h ext/seqtk/kseq.h test/orfm_spec.rb
+orfm_SOURCES= src/orfm.c ext/ac.c ext/ac.h ext/seqtk/kseq.h test/orfm_spec.rb test/20_random100bp.fna
 
 DEF := -D ORFM_VERSION=$(ORFM_VERSION)
 
