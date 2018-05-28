@@ -38,6 +38,12 @@ Or, you can install through [guix](http://www.gnu.org/software/guix/):
 guix package -i orfm
 ```
 
+### 4) Install with brew
+Thanks to Torsten Seemann (@tseemann), OrfM can be installed through homebrew:
+```
+brew install brewsci/bio/orfm
+```
+
 Running
 ----
 To find all reading frames greater than 96 nucleotides in length:
