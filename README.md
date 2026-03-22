@@ -1,41 +1,40 @@
-OrfM
-====
+# OrfM
 
 A simple and not slow open reading frame (ORF) caller. No bells or whistles like frameshift detection, just a straightforward goal 
-of returning a FASTA file of open reading frames over a certain length from a FASTA/Q file of nucleotide sequences. 
+of returning a FASTA file of open reading frames over a certain length from a FASTA/Q file of nucleotide sequences.
 
-Install
-----
-OrfM can be installed in 3 ways.
+As of version 2.0, it is a pure-Rust reimplementation of the original C OrfM, which is no longer maintained. The algorithm is the same as the original, but the codebase has been rewritten from scratch in Rust, with a library API.
+
+## Install
+
+OrfM can be installed in different ways:
+
 ### 1) Install from pre-compiled binaries
+
 OrfM can be installed by downloading pre-compiled binaries available at https://github.com/wwood/OrfM/releases. Once you have downloaded the package, extract and run it e.g. for GNU/Linux:
 ```sh
-tar xzf orfm-x.x.x_Linux_x86_64.tar.gz
-cd orfm-x.x.x_Linux_x86_64
+tar xzf orfm-<version>.tar.gz
+cd orfm-<version>
 ./orfm -h
 ```
-### 2) Install from source
-If you desire, OrfM can also be installed from source. Download the `orfm-x.x.x.tar.gz` from the [releases](https://github.com/wwood/OrfM/releases) page (_not_ the 'Source code' or the 'Download zip') and then follow the usual protocol for compilation and installation:
-```sh
-tar xzf orfm-x.x.x.tar.gz
-cd orfm-x.x.x
-./configure
-make
+
+### 2) Install from source (requires Rust toolchain)
+
+```bash
+cargo install orfm
 ```
-To run `make check` you need Ruby and as well as the `rspec` and `bio-commandeer` rubygems. This step is optional.
+
+Or build without installing:
+
+```bash
+cargo build --release
+# binary at target/release/orfm
 ```
-gem install rspec bio-commandeer # may require 'sudo'
-make check
-```
-Then finally to install OrfM
-```
-sudo make install
-orfm -h
-```
-### 3) Install with GNU Guix
-Or, you can install through [guix](http://www.gnu.org/software/guix/):
-```
-guix package -i orfm
+
+### 3) Install via Conda / Pixi
+
+```bash
+conda install -c bioconda orfm
 ```
 
 ### 4) Install with brew
@@ -44,81 +43,101 @@ Thanks to Torsten Seemann (@tseemann), OrfM can be installed through homebrew:
 brew install brewsci/bio/orfm
 ```
 
-Running
-----
-To find all reading frames greater than 96 nucleotides in length:
-```sh
-orfm <seq_file> >orfs.fa
+## Usage
+
 ```
-The `<seq_file>` can be a FASTA or FASTQ file, gzipped or uncompressed. The default is 96
-because this is the correct number for 100bp so that each of the 6 frames can be translated.
-Using 99 would mean that the third frame forward (and the corresponding reverse frame) cannot 
-possibly returned as an ORF because this would entail it encapsulating bases 2-101, and 101>100.
-
-Output
----
-The output ORFs fasta file contains any stretch of continuous codons which does not include a stop codon. 
-There is no requirement for a start codon to be included in the ORF. One could say that OrfM is an ORF caller, not a gene caller (like say prodigal or genscan).
-
-The output ORFs are named in a straitforward manner. The name of the sequence (i.e. anything before a space) is followed by `_startPosition_frameNumber_orfNumber` and then 
-the comment of the sequence (i.e. anything after the space) is given after a space, if one exists. For example,
-```
-$ cat eg.fasta
->abc|123|name some comment
-ATGTTA
-$ orfm -m 3 eg.fasta
->abc|123|name_1_1_1 some comment
-ML
-```
-The `startPosition` of reverse frames is the left-most position in the original sequence, not the codon where the ORF starts.
-
-Not too slow
-----
-It runs in reasonable time compared to e.g. `translate` from Sean Eddy's `squid` (available as part of the Ubuntu  [biosquid package](https://launchpad.net/ubuntu/+source/biosquid)), `getorf` from the `emboss` toolkit, and `prodigal`, a more nuanced gene caller. For a 463MB fasta file of 100bp sequences:
-```
-orfm -m 96 the.fa >orfm.fa
-  #=> 7 seconds
-
-translate -l 32 the.fa >biosquid.m33.txt
-  #=> 29 seconds
-  
-getorf -sequence the.fa -minsize 96 -outseq getorf.fa
-  #=> 38 sec
-
-pigz -cd 110811_E_1_D_nesoni_single.fq.gz |fq2fa |prodigal -q -p meta -i /dev/stdin -a 110811_E_1_D_nesoni_single.prodigal.faa -o /dev/null
-  #=> 16 min 6 sec
-```
-`translate` also does not appear to be able to handle fastq files (even piped in on `stdin` as fasta), and does not output a standard FASTA format file.
-
-FAQ
-----
-### `bash: ./configure: No such file or directory`
-
-This can happen when trying to build OrfM from source. It might mean that the original source code has been downloaded, rather than the 'dist' archive. Download `orfm-x.x.x.tar.gz` from the [releases page](https://github.com/wwood/OrfM/releases) which contains the `configure` script (not the 'Source code'), and then follow the instructions for building from source above.
-
-Contributing to OrfM
-----
-Patches most welcome. To get started:
-```sh
-git clone --recursive https://github.com/wwood/OrfM
-cd OrfM
-./autogen.sh
-./configure
-make check
+orfm [OPTIONS] [INPUT]
 ```
 
-Credits
-----
-Compiled into the code is `kseq.h` from [seqtk](https://github.com/lh3/seqtk) and an 
-implementation of the [Alo-Corasick algorithm](https://en.wikipedia.org/wiki/Aho%E2%80%93Corasick_string_matching_algorithm)
-from [strmat](http://web.cs.ucdavis.edu/~gusfield/strmat.html) modified [slightly](https://github.com/aurelian/ruby-ahocorasick).
-Both are MIT licenced. A few GNU `libc` libraries are used too.
+Reads from stdin if no input file is given. Accepts FASTA or FASTQ, gzipped or uncompressed.
 
-Citing OrfM
-----
-Software (c) Ben J. Woodcroft, released under LGPL - see the LICENSE.txt for licensing details.
+### Options
 
-A peer-reviewed manuscript describing OrfM has been published. If you use OrfM in your work then please help us out by citing it - thank you.
+| Flag | Description | Default |
+|---|---|---|
+| `-m <LENGTH>` | Minimum ORF length in nucleotides (must be a multiple of 3) | 96 |
+| `-c <TABLE_ID>` | NCBI codon table for translation (1–25) | 1 |
+| `-l <LENGTH>` | Ignore sequence beyond this position | none |
+| `-t <FILE>` | Write nucleotide transcripts to this file | none |
+
+### Examples
+
+```bash
+# Basic usage
+orfm input.fasta > orfs.faa
+
+# From gzipped FASTQ, shorter minimum ORF length
+orfm -m 30 reads.fastq.gz > orfs.faa
+
+# Pipe from stdin, write transcripts
+cat input.fasta | orfm -m 60 -t transcripts.fna > orfs.faa
+
+# Use mitochondrial codon table
+orfm -c 2 mito.fasta > orfs.faa
+```
+
+## Library usage
+
+orfm can be used as a Rust library. Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+orfm = '*'
+```
+Then to use it:
+```rust
+use orfm::OrfCaller;
+
+let caller = OrfCaller::new(1, 96, None).unwrap(); // table_id, min_length, position_limit
+
+// Iterate over ORFs from a file
+for orf in caller.call_from_file("input.fasta") {
+    println!("{}", orf.header());
+    println!("{}", std::str::from_utf8(&orf.protein).unwrap());
+}
+
+// Or call on a single sequence
+let orfs = caller.find_orfs("seq1", "", b"ATGGATGCTGAA...");
+for orf in &orfs {
+    let transcript = orf.transcript(b"ATGGATGCTGAA...");
+    // ...
+}
+```
+
+## Benchmarking
+
+A Snakefile is included for comparing performance against the original C OrfM. It generates random sequences, runs both tools, checks output correctness, and collects wall-clock time and memory usage.
+
+```bash
+snakemake -j4
+cat benchmark/results.tsv
+cat benchmark/correctness.txt
+```
+When I ran it, orfm-rs was the winner by ~5% in walltime:
+
+| tool | replicate | wall_clock_s | max_rss_kb |
+|------|-----------|--------------|------------|
+| orfm_c | 1 | 2.11 | 16088 |
+| orfm_rs | 1 | 1.99 | 15572 |
+| orfm_c | 2 | 2.1 | 15432 |
+| orfm_rs | 2 | 2.0 | 16116 |
+| orfm_c | 3 | 2.12 | 16164 |
+| orfm_rs | 3 | 2.02 | 16148 |
+
+Requires the C OrfM binary at `~/git/OrfM/orfm` (this path can be changed in the Snakefile).
+
+## Differences from OrfM
+
+- Pure Rust, no C dependencies
+- Exposes a library API with an iterator over translated ORFs
+- Supports all codon tables that OrfM supports (NCBI tables 1–25)
+- Uses [needletail](https://github.com/onecodex/needletail) for sequence parsing and [aho-corasick](https://github.com/BurntSushi/aho-corasick) for stop codon detection
+
+## License
+
+OrfM is licensed under the [GNU Lesser General Public License v3.0](https://www.gnu.org/licenses/lgpl-3.0.en.html) (LGPL-3.0).
+
+## Citation
+Since the algorithm was devised for the original version of OrfM, best to cite that:
 
 Ben J. Woodcroft, Joel A. Boyd, and Gene W. Tyson. [_OrfM: A fast open reading frame predictor for metagenomic data_](http://bioinformatics.oxfordjournals.org/content/32/17/2702). (2016). Bioinformatics. doi:10.1093/bioinformatics/btw241.
-
