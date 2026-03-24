@@ -3,13 +3,19 @@
 A simple and not slow open reading frame (ORF) caller. No bells or whistles like frameshift detection, just a straightforward goal 
 of returning a FASTA file of open reading frames over a certain length from a FASTA/Q file of nucleotide sequences.
 
-As of version 2.0, it is a pure-Rust reimplementation of the original C OrfM, which is no longer maintained. The algorithm is the same as the original, but the codebase has been rewritten from scratch in Rust, with a library API.
+As of version 2.0, it is a pure-Rust reimplementation of the original C OrfM. The algorithm is the same as the original, but the codebase has been rewritten from scratch in Rust, with a library API added.
 
 ## Install
 
 OrfM can be installed in different ways:
 
-### 1) Install from pre-compiled binaries
+### 1) Install via shell pipe
+Follow the instructions on the [releases page](https://github.com/wwood/OrfM/releases) e.g. for Linux:
+```
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/wwood/OrfM/releases/download/v<version>/orfm-installer.sh | sh
+```
+
+### 2) Install from pre-compiled binaries
 
 OrfM can be installed by downloading pre-compiled binaries available at https://github.com/wwood/OrfM/releases. Once you have downloaded the package, extract and run it e.g. for GNU/Linux:
 ```sh
@@ -18,7 +24,7 @@ cd orfm-<version>
 ./orfm -h
 ```
 
-### 2) Install from source (requires Rust toolchain)
+### 3) Install from source (requires Rust toolchain)
 
 ```bash
 cargo install orfm
@@ -31,13 +37,13 @@ cargo build --release
 # binary at target/release/orfm
 ```
 
-### 3) Install via Conda / Pixi
+### 4) Install via Conda / Pixi
 
 ```bash
 conda install -c bioconda orfm
 ```
 
-### 4) Install with brew
+### 5) Install with brew
 Thanks to Torsten Seemann (@tseemann), OrfM can be installed through homebrew:
 ```
 brew install brewsci/bio/orfm
@@ -126,7 +132,7 @@ When I ran it, orfm-rs was the winner by ~5% in walltime:
 
 Requires the C OrfM binary at `~/git/OrfM/orfm` (this path can be changed in the Snakefile).
 
-## Differences from OrfM
+## Notes
 
 - Pure Rust, no C dependencies
 - Exposes a library API with an iterator over translated ORFs
