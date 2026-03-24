@@ -1,6 +1,6 @@
 [package]
 name = "orfm"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
 description = "A pure-Rust port of OrfM - a simple and not slow open reading frame (ORF) caller"
 license = "LGPL-3.0"

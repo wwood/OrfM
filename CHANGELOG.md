@@ -1,7 +1,12 @@
 # Changelog
 
-## [0.2.0] - 2026-03-23
+## [2.0.1] - 2026-03-24
 
 ### Added
-- A complete rewrite of the codebase in Rust. The algorithm is the same as the original C OrfM, but the code has been rewritten from scratch in Rust.
-- Addition of a library API. 
+- `--version` flag
+
+## [2.0.0] - 2026-03-23
+
+### Added
+- Complete rewrite in Rust (algorithm unchanged from original C OrfM)
+- Library API
