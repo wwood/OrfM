@@ -95,6 +95,58 @@ fn test_lower_case() {
 }
 
 #[test]
+fn test_lower_case_stop_codons() {
+    // Lowercase stop codons must be recognized just like uppercase ones.
+    // TAATAA contains stop codons TAA at positions 0 and 3 (frame 1),
+    // so the only ORF in frame 1 should be the one between those stops.
+    let upper_input = ">eg\nTAATAA\n";
+    let lower_input = ">eg\ntaataa\n";
+    let upper_output = run_orfm(upper_input, 6, 1, None);
+    let lower_output = run_orfm(lower_input, 6, 1, None);
+    assert_eq!(
+        upper_output, lower_output,
+        "Lowercase nucleotides should produce the same ORFs as uppercase.\nUpper: {}\nLower: {}",
+        upper_output, lower_output
+    );
+}
+
+#[test]
+fn test_terminal_orfs_no_false_stop_codon() {
+    // Terminal ORFs (those reaching the end of the sequence without a stop codon)
+    // must not have a stop codon ('*') in their protein. Only ORFs that actually
+    // encounter a stop codon should contain '*' when translated.
+    //
+    // Sequence: AAATTATTGATTCTGAATTATCATTATTATCAT... contains stop codons in
+    // some frames but not all. Frames that reach the end of the sequence without
+    // a stop codon produce terminal ORFs.
+    let input = ">test\nAAATTATTGATTCTGAATTATCATTATTATCATTATTATCATTATTATCATTATTATTATTATCATTATTATTATCATTATTATTATCATTATTATCATTATTATTATTAATTAT\n";
+    let output = run_orfm(input, 9, 1, None);
+    let lines: Vec<&str> = output.trim().split('\n').collect();
+
+    // Every protein line (odd-indexed lines) should NOT contain '*'.
+    // OrfM does not include stop codons in its translation output, and terminal
+    // ORFs should not have a spurious stop codon appended.
+    for (i, line) in lines.iter().enumerate() {
+        if i % 2 == 1 {
+            // This is a protein sequence line
+            assert!(
+                !line.contains('*'),
+                "ORF protein should not contain '*' (stop codon). Header: {}, Protein: {}",
+                lines[i - 1],
+                line
+            );
+        }
+    }
+
+    // Verify we get the expected ORFs - a mix of stop-codon-terminated and
+    // terminal (sequence-boundary) ORFs across different frames.
+    assert!(
+        lines.len() >= 2,
+        "Expected at least one ORF from this input"
+    );
+}
+
+#[test]
 fn test_position_limit_basic() {
     let input = ">eg\nTTAANAGGGGGGGGGG\n";
 

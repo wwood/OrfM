@@ -2,7 +2,11 @@ use clap::Parser;
 use std::io::{self, BufWriter, Write};
 
 #[derive(Parser)]
-#[command(name = "orfm", about = "Find and translate open reading frames", version)]
+#[command(
+    name = "orfm",
+    about = "Find and translate open reading frames",
+    version
+)]
 struct Args {
     /// Input FASTA/FASTQ file (gzipped or uncompressed). Reads from stdin if not provided.
     input: Option<String>,
