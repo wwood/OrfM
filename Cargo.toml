@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 aho-corasick = "1"
-needletail = "0.6"
+needletail = "0.7"
 clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
