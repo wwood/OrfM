@@ -4,6 +4,20 @@ use std::io;
 mod codon_tables;
 pub use codon_tables::get_codon_table;
 
+/// Compare two semver-style version strings (MAJOR.MINOR.PATCH).
+/// Returns true if `current` >= `required`.
+pub fn version_at_least(current: &str, required: &str) -> bool {
+    let parse = |s: &str| -> (u64, u64, u64) {
+        let mut parts = s.split('.').filter_map(|p| p.parse::<u64>().ok());
+        (
+            parts.next().unwrap_or(0),
+            parts.next().unwrap_or(0),
+            parts.next().unwrap_or(0),
+        )
+    };
+    parse(current) >= parse(required)
+}
+
 /// A single open reading frame found in a sequence.
 #[derive(Debug, Clone)]
 pub struct Orf {
@@ -23,6 +37,8 @@ pub struct Orf {
     pub is_reverse: bool,
     /// Length of the nucleotide ORF region.
     pub nuc_length: usize,
+    /// Whether this ORF is bounded by an in-frame stop codon (vs. running to sequence end).
+    pub has_stop_codon: bool,
 }
 
 impl Orf {
@@ -270,6 +286,13 @@ impl OrfCaller {
         last_pos[4] = 1;
         last_pos[5] = 2;
 
+        // For reverse frames (indices 3-5): tracks whether the current left boundary of the
+        // frame was set by an actual stop codon. On the reverse strand, reading 5'→3' goes
+        // from high to low forward positions, so the 3' end of a reverse ORF is on the LEFT
+        // (low forward position). A reverse ORF has a stop codon only when its left boundary
+        // (last_pos[rev_idx]) was set by a previous stop, not by the initial sequence offset.
+        let mut rev_left_is_stop = [false; 3];
+
         let mut orfs = Vec::new();
         let mut orf_counter = 1usize;
 
@@ -280,7 +303,7 @@ impl OrfCaller {
             let pattern_id = mat.pattern().as_usize();
 
             if pattern_id < self.num_fwd_stop_codons {
-                // Forward stop codon
+                // Forward stop codon: stop is at the 3' end of the ORF to its left.
                 let orf_len = match_start - last_pos[mod3];
                 if orf_len >= self.min_length {
                     let protein = translate_forward(seq, last_pos[mod3], orf_len, &self.fast_table);
@@ -293,12 +316,18 @@ impl OrfCaller {
                         protein,
                         is_reverse: false,
                         nuc_length: orf_len,
+                        has_stop_codon: true,
                     });
                     orf_counter += 1;
                 }
                 last_pos[mod3] = match_start + 3;
             } else {
-                // Reverse complement stop codon
+                // Reverse complement stop codon.
+                // On the reverse strand (reading 5'→3' = high→low in forward coords), this
+                // stop codon is at the 5' end of the upcoming ORF (to its LEFT in forward
+                // coords). The ORF from last_pos[rev_idx]..match_start has its 3' end at
+                // last_pos[rev_idx], which is the stop-codon end only if that boundary was
+                // itself set by a previous stop.
                 let rev_idx = mod3 + 3;
                 let orf_len = match_start - last_pos[rev_idx];
                 if orf_len >= self.min_length {
@@ -313,10 +342,12 @@ impl OrfCaller {
                         protein,
                         is_reverse: true,
                         nuc_length: orf_len,
+                        has_stop_codon: rev_left_is_stop[mod3],
                     });
                     orf_counter += 1;
                 }
                 last_pos[rev_idx] = match_start + 3;
+                rev_left_is_stop[mod3] = true;
             }
         }
 
@@ -343,6 +374,10 @@ impl OrfCaller {
                 } else {
                     translate_forward(seq, last_pos[frame_idx], orf_len, &self.fast_table)
                 };
+                // Forward terminal ORFs never have a stop at their 3' end.
+                // Reverse terminal ORFs: their 3' end (left boundary in forward coords) has a
+                // stop codon only if that boundary was set by a previous RC stop codon.
+                let has_stop_codon = is_reverse && rev_left_is_stop[frame_idx - 3];
                 orfs.push(Orf {
                     seq_name: name.to_string(),
                     seq_comment: comment.to_string(),
@@ -352,6 +387,7 @@ impl OrfCaller {
                     protein,
                     is_reverse,
                     nuc_length: orf_len,
+                    has_stop_codon,
                 });
                 orf_counter += 1;
             }

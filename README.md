@@ -65,6 +65,9 @@ Reads from stdin if no input file is given. Accepts FASTA or FASTQ, gzipped or u
 | `-c <TABLE_ID>` | NCBI codon table for translation (1–25) | 1 |
 | `-l <LENGTH>` | Ignore sequence beyond this position | none |
 | `-t <FILE>` | Write nucleotide transcripts to this file | none |
+| `-p` | Append `*` to proteins whose ORF is terminated by an in-frame stop codon | off |
+| `-s` | Only output ORFs that are terminated by an in-frame stop codon (suppress terminal ORFs) | off |
+| `-r <VERSION>` | Exit with an error if the running OrfM version is older than `VERSION` (e.g. `2.0.2`) | none |
 
 ### Examples
 
@@ -81,6 +84,22 @@ cat input.fasta | orfm -m 60 -t transcripts.fna > orfs.faa
 # Use mitochondrial codon table
 orfm -c 2 mito.fasta > orfs.faa
 ```
+
+### Output
+The output ORFs fasta file contains any stretch of continuous codons which does not include a stop codon. 
+There is no requirement for a start codon to be included in the ORF. One could say that OrfM is an ORF caller, not a gene caller (like say prodigal or genscan).
+
+The output ORFs are named in a straitforward manner. The name of the sequence (i.e. anything before a space) is followed by `_startPosition_frameNumber_orfNumber` and then 
+the comment of the sequence (i.e. anything after the space) is given after a space, if one exists. For example,
+```
+$ cat eg.fasta
+>abc|123|name some comment
+ATGTTA
+$ orfm -m 3 eg.fasta
+>abc|123|name_1_1_1 some comment
+ML
+```
+The `startPosition` of reverse frames is the left-most position in the original sequence, not the codon where the ORF starts.
 
 ## Library usage
 

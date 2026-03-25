@@ -23,6 +23,36 @@ fn run_orfm(
     output.join("\n") + if output.is_empty() { "" } else { "\n" }
 }
 
+/// Helper: run OrfCaller with -p (print_stop) and/or -s (stop_codon_only) flags.
+fn run_orfm_with_flags(
+    seq_input: &str,
+    min_length: usize,
+    table_id: usize,
+    print_stop: bool,
+    stop_codon_only: bool,
+) -> String {
+    let caller = OrfCaller::new(table_id, min_length, None).unwrap();
+    let mut reader = needletail::parse_fastx_reader(seq_input.as_bytes()).unwrap();
+    let mut output = Vec::new();
+    while let Some(Ok(record)) = reader.next() {
+        let (name, comment) = split_header(record.id());
+        let seq = record.raw_seq();
+        let orfs = caller.find_orfs(name, comment, &seq);
+        for orf in orfs {
+            if stop_codon_only && !orf.has_stop_codon {
+                continue;
+            }
+            let mut protein = String::from_utf8(orf.protein.clone()).unwrap();
+            if print_stop && orf.has_stop_codon {
+                protein.push('*');
+            }
+            output.push(orf.header());
+            output.push(protein);
+        }
+    }
+    output.join("\n") + if output.is_empty() { "" } else { "\n" }
+}
+
 /// Helper: run and get transcripts too.
 fn run_orfm_with_transcripts(
     seq_input: &str,
@@ -238,6 +268,140 @@ fn test_alternative_codon_table() {
     ];
     let actual_lines: Vec<&str> = output.trim().split('\n').collect();
     assert_eq!(actual_lines, expected_lines);
+}
+
+/// Test -r VERSION: version_at_least logic used by the -r flag.
+#[test]
+fn test_required_version_flag() {
+    // Equal version is accepted
+    assert!(version_at_least("2.0.1", "2.0.1"));
+    assert!(version_at_least("1.4.0", "1.4.0"));
+
+    // Higher current version is accepted
+    assert!(version_at_least("2.0.1", "1.4.0"));
+    assert!(version_at_least("2.0.1", "2.0.0"));
+    assert!(version_at_least("2.0.1", "1.99.99"));
+    assert!(version_at_least("3.0.0", "2.9.9"));
+
+    // Lower current version is rejected
+    assert!(!version_at_least("1.4.0", "2.0.1"));
+    assert!(!version_at_least("2.0.0", "2.0.1"));
+    assert!(!version_at_least("2.0.1", "2.0.2"));
+    assert!(!version_at_least("2.0.1", "3.0.0"));
+
+    // The actual binary version satisfies itself
+    let current = env!("CARGO_PKG_VERSION");
+    assert!(version_at_least(current, current));
+
+    // The actual binary version rejects a higher requirement
+    assert!(!version_at_least(current, "999.0.0"));
+}
+
+/// Test -p (print stop codons) and -s (only ORFs with stop codons) flags.
+///
+/// Sequence contains 6 ORFs without flags; 3 are bounded by stop codons and 3 are
+/// terminal (reach the sequence boundary without a stop codon).
+///
+/// With -s: terminal ORFs are filtered out.
+/// With -p: stop-codon-bounded ORFs get '*' appended.
+///
+/// test_3_6_1 (FRINN) is bounded by TTA at positions 17-19 of the forward sequence,
+/// which is the reverse complement of TAA (a real stop codon on the reverse strand).
+/// test_17_2_4, test_3_3_5, and test_2_5_6 are terminal ORFs with no stop codon.
+#[test]
+fn test_print_stop_and_stop_codon_only() {
+    let input = ">test\nAAATTATTGATTCTGAATTATCATTATTATCATTATTATCATTATTATCATTATTATTATTATCATTATTATTATCATTATTATTATCATTATTATCATTATTATTATTAATTAT\n";
+
+    // -s only: filter to stop-codon-bounded ORFs, no '*' appended.
+    // test_3_6_1 (FRINN) is a reverse ORF whose 3' end reaches the sequence boundary
+    // (its left boundary in forward coords was never set by a stop codon), so it is
+    // terminal and should be filtered. test_7_4_3 is a reverse ORF whose left boundary
+    // was set by the RC stop at position 3, so it IS stop-bounded at the 3' end.
+    let s_only = run_orfm_with_flags(input, 9, 1, false, true);
+    let s_lines: Vec<&str> = s_only.trim().split('\n').collect();
+    assert!(
+        s_lines.iter().any(|l| l.contains("test_1_1_2")),
+        "-s should keep test_1_1_2"
+    );
+    assert!(
+        s_lines.iter().any(|l| l.contains("test_7_4_3")),
+        "-s should keep test_7_4_3"
+    );
+    assert!(
+        !s_lines.iter().any(|l| l.contains("test_3_6_1")),
+        "-s should filter test_3_6_1 (terminal: 3' end reaches sequence boundary)"
+    );
+    assert!(
+        !s_lines.iter().any(|l| l.contains("test_17_2_4")),
+        "-s should filter test_17_2_4"
+    );
+    assert!(
+        !s_lines.iter().any(|l| l.contains("test_3_3_5")),
+        "-s should filter test_3_3_5"
+    );
+    assert!(
+        !s_lines.iter().any(|l| l.contains("test_2_5_6")),
+        "-s should filter test_2_5_6"
+    );
+    // Without -p, no '*' in proteins
+    for (i, line) in s_lines.iter().enumerate() {
+        if i % 2 == 1 {
+            assert!(
+                !line.contains('*'),
+                "Without -p, no '*' should appear in proteins"
+            );
+        }
+    }
+
+    // -p only: print '*' after stop-codon-bounded ORF proteins; all 6 ORFs shown
+    let p_only = run_orfm_with_flags(input, 9, 1, true, false);
+    let p_lines: Vec<&str> = p_only.trim().split('\n').collect();
+    // Stop-codon-bounded ORFs have '*'; terminal ORFs do not
+    let find_protein = |lines: &Vec<&str>, header_part: &str| -> String {
+        lines
+            .windows(2)
+            .find(|w| w[0].contains(header_part))
+            .map(|w| w[1].to_string())
+            .unwrap_or_default()
+    };
+    assert!(
+        !find_protein(&p_lines, "test_3_6_1").ends_with('*'),
+        "test_3_6_1 is terminal, should NOT get '*' with -p"
+    );
+    assert!(
+        find_protein(&p_lines, "test_1_1_2").ends_with('*'),
+        "test_1_1_2 has a stop codon at its 3' end, should get '*' with -p"
+    );
+    assert!(
+        find_protein(&p_lines, "test_7_4_3").ends_with('*'),
+        "test_7_4_3 has a stop codon at its 3' end, should get '*' with -p"
+    );
+    assert!(
+        !find_protein(&p_lines, "test_17_2_4").ends_with('*'),
+        "test_17_2_4 is terminal, should NOT get '*' with -p"
+    );
+
+    // -p -s together: only stop-codon-bounded ORFs (test_1_1_2 and test_7_4_3), each with '*'
+    let ps = run_orfm_with_flags(input, 9, 1, true, true);
+    let ps_lines: Vec<&str> = ps.trim().split('\n').collect();
+    assert_eq!(
+        ps_lines.len(),
+        4,
+        "Expected exactly 2 ORFs (4 lines) with -p -s"
+    );
+    for (i, line) in ps_lines.iter().enumerate() {
+        if i % 2 == 1 {
+            assert!(
+                line.ends_with('*'),
+                "With -p -s, every protein should end with '*': {}",
+                line
+            );
+        }
+    }
+    assert!(!ps_lines.iter().any(|l| l.contains("test_3_6_1")));
+    assert!(ps_lines.iter().any(|l| l.contains("test_1_1_2")));
+    assert!(ps_lines.iter().any(|l| l.contains("test_7_4_3")));
+    assert!(!ps_lines.iter().any(|l| l.contains("test_17_2_4")));
 }
 
 /// Integration test: compare output against the original OrfM binary if available.

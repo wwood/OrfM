@@ -26,6 +26,18 @@ struct Args {
     /// Codon table ID (1-25, NCBI standard)
     #[arg(short = 'c', default_value = "1")]
     codon_table: usize,
+
+    /// Print stop codon (*) at the end of ORFs that are bounded by a stop codon
+    #[arg(short = 'p', default_value = "false")]
+    print_stop_codons: bool,
+
+    /// Only output ORFs that are bounded by an in-frame stop codon (exclude ORFs that end at the end of the sequence without a stop codon)
+    #[arg(short = 's', default_value = "false")]
+    stop_codon_only: bool,
+
+    /// Require OrfM to be at least this version (e.g. 1.4.0); exit with error if not
+    #[arg(short = 'r')]
+    required_version: Option<String>,
 }
 
 fn split_header(header: &[u8]) -> (&str, &str) {
@@ -38,6 +50,17 @@ fn split_header(header: &[u8]) -> (&str, &str) {
 
 fn main() {
     let args = Args::parse();
+
+    if let Some(ref required) = args.required_version {
+        let current = env!("CARGO_PKG_VERSION");
+        if !orfm::version_at_least(current, required) {
+            eprintln!(
+                "ERROR: OrfM version {} is less than required version {}",
+                current, required
+            );
+            std::process::exit(1);
+        }
+    }
 
     let caller = match orfm::OrfCaller::new(args.codon_table, args.min_length, args.position_limit)
     {
@@ -76,6 +99,9 @@ fn main() {
         let seq = record.raw_seq();
         let orfs = caller.find_orfs(name, comment, seq);
         for orf in orfs {
+            if args.stop_codon_only && !orf.has_stop_codon {
+                continue;
+            }
             if let Some(ref mut tw) = transcript_out {
                 writeln!(tw, "{}", orf.header()).unwrap();
                 let transcript = orf.transcript(seq);
@@ -84,6 +110,9 @@ fn main() {
             }
             writeln!(out, "{}", orf.header()).unwrap();
             out.write_all(&orf.protein).unwrap();
+            if args.print_stop_codons && orf.has_stop_codon {
+                out.write_all(b"*").unwrap();
+            }
             writeln!(out).unwrap();
         }
     }
