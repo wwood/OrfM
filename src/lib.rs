@@ -81,6 +81,7 @@ pub struct OrfCaller {
     fast_table: Vec<u8>,
     ac: AhoCorasick,
     num_fwd_stop_codons: usize,
+    num_stop_codons: usize,
     min_length: usize,
     position_limit: Option<usize>,
 }
@@ -253,32 +254,41 @@ impl OrfCaller {
             }
         }
 
-        let ac = AhoCorasick::new(&patterns)
+        let num_stop = patterns.len();
+
+        // Newline sentinel patterns (detected during AC scan to trigger normalization)
+        patterns.push(vec![b'\n']);
+        patterns.push(vec![b'\r']);
+
+        let ac = AhoCorasick::builder()
+            .ascii_case_insensitive(true)
+            .build(&patterns)
             .map_err(|e| format!("Failed to build Aho-Corasick automaton: {}", e))?;
 
         Ok(OrfCaller {
             fast_table,
             ac,
             num_fwd_stop_codons: num_fwd,
+            num_stop_codons: num_stop,
             min_length,
             position_limit,
         })
     }
 
-    /// Find all ORFs in a single sequence. Returns a Vec of Orf.
-    pub fn find_orfs(&self, name: &str, comment: &str, seq: &[u8]) -> Vec<Orf> {
+    /// Find all ORFs in a single sequence.
+    ///
+    /// Returns `Some(orfs)` on success, or `None` if a newline character was
+    /// detected in the sequence (caller should retry with a normalized sequence).
+    pub fn find_orfs(&self, name: &str, comment: &str, seq: &[u8]) -> Option<Vec<Orf>> {
         let seq_len = seq.len();
         if seq_len < self.min_length {
-            return Vec::new();
+            return Some(Vec::new());
         }
 
         let read_limit = match self.position_limit {
             Some(pl) if pl < seq_len => pl,
             _ => seq_len,
         };
-
-        // Need uppercase for AC matching (AC patterns are uppercase)
-        let upper_seq: Vec<u8> = seq.iter().map(|&b| b.to_ascii_uppercase()).collect();
 
         let mut last_pos = [0usize; 6];
         last_pos[1] = 1;
@@ -296,11 +306,16 @@ impl OrfCaller {
         let mut orfs = Vec::new();
         let mut orf_counter = 1usize;
 
-        // Search for stop codons using Aho-Corasick
-        for mat in self.ac.find_overlapping_iter(&upper_seq[..read_limit]) {
+        // Search for stop codons using Aho-Corasick (case-insensitive)
+        for mat in self.ac.find_overlapping_iter(&seq[..read_limit]) {
             let match_start = mat.start();
             let mod3 = match_start % 3;
             let pattern_id = mat.pattern().as_usize();
+
+            // Newline sentinel: sequence contains embedded newlines, caller must normalize
+            if pattern_id >= self.num_stop_codons {
+                return None;
+            }
 
             if pattern_id < self.num_fwd_stop_codons {
                 // Forward stop codon: stop is at the 3' end of the ORF to its left.
@@ -393,7 +408,7 @@ impl OrfCaller {
             }
         }
 
-        orfs
+        Some(orfs)
     }
 
     /// Iterate over all ORFs from a FASTA/FASTQ file (or gzipped).
@@ -403,6 +418,7 @@ impl OrfCaller {
             reader: needletail::parse_fastx_file(path).expect("Failed to open sequence file"),
             current_orfs: Vec::new(),
             current_idx: 0,
+            needs_normalize: false,
         }
     }
 
@@ -413,6 +429,7 @@ impl OrfCaller {
             reader: needletail::parse_fastx_reader(reader).expect("Failed to parse sequence input"),
             current_orfs: Vec::new(),
             current_idx: 0,
+            needs_normalize: false,
         }
     }
 }
@@ -423,6 +440,8 @@ pub struct OrfFileIter<'a> {
     reader: Box<dyn needletail::FastxReader>,
     current_orfs: Vec<Orf>,
     current_idx: usize,
+    /// Once true, all subsequent records use seq() instead of raw_seq().
+    needs_normalize: bool,
 }
 
 impl Iterator for OrfFileIter<'_> {
@@ -439,8 +458,20 @@ impl Iterator for OrfFileIter<'_> {
             match self.reader.next() {
                 Some(Ok(record)) => {
                     let (name, comment) = split_header(record.id());
-                    let seq = record.raw_seq();
-                    self.current_orfs = self.caller.find_orfs(name, comment, seq);
+                    if self.needs_normalize {
+                        let seq = record.seq();
+                        self.current_orfs = self.caller.find_orfs(name, comment, &seq).unwrap();
+                    } else {
+                        match self.caller.find_orfs(name, comment, record.raw_seq()) {
+                            Some(orfs) => self.current_orfs = orfs,
+                            None => {
+                                self.needs_normalize = true;
+                                let seq = record.seq();
+                                self.current_orfs =
+                                    self.caller.find_orfs(name, comment, &seq).unwrap();
+                            }
+                        }
+                    }
                     self.current_idx = 0;
                 }
                 _ => return None,
@@ -455,6 +486,8 @@ pub struct OrfReaderIter<'a> {
     reader: Box<dyn needletail::FastxReader + 'a>,
     current_orfs: Vec<Orf>,
     current_idx: usize,
+    /// Once true, all subsequent records use seq() instead of raw_seq().
+    needs_normalize: bool,
 }
 
 impl Iterator for OrfReaderIter<'_> {
@@ -471,8 +504,20 @@ impl Iterator for OrfReaderIter<'_> {
             match self.reader.next() {
                 Some(Ok(record)) => {
                     let (name, comment) = split_header(record.id());
-                    let seq = record.raw_seq();
-                    self.current_orfs = self.caller.find_orfs(name, comment, seq);
+                    if self.needs_normalize {
+                        let seq = record.seq();
+                        self.current_orfs = self.caller.find_orfs(name, comment, &seq).unwrap();
+                    } else {
+                        match self.caller.find_orfs(name, comment, record.raw_seq()) {
+                            Some(orfs) => self.current_orfs = orfs,
+                            None => {
+                                self.needs_normalize = true;
+                                let seq = record.seq();
+                                self.current_orfs =
+                                    self.caller.find_orfs(name, comment, &seq).unwrap();
+                            }
+                        }
+                    }
                     self.current_idx = 0;
                 }
                 _ => return None,

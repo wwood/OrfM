@@ -1,6 +1,6 @@
 [package]
 name = "orfm"
-version = "2.0.2"
+version = "2.0.3"
 edition = "2021"
 description = "A pure-Rust port of OrfM - a simple and not slow open reading frame (ORF) caller"
 license = "LGPL-3.0"
@@ -22,6 +22,7 @@ clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3"
+flate2 = "1"
 
 [profile.release]
 lto = true

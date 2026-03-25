@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.3] - 2026-03-25
+
+### Fixed
+- Correctly handle wrapped (multi-line) FASTA sequences. Previously `raw_seq()` was
+  used which includes embedded newlines, producing incorrect ORFs for wrapped input.
+
+### Changed
+- Aho-Corasick automaton is now case-insensitive, removing a per-sequence uppercase
+  copy allocation.
+- Newline detection is integrated into the Aho-Corasick scan itself: `raw_seq()` is
+  used optimistically (zero-copy), and if a newline is encountered during the stop
+  codon search, the sequence is re-processed via `seq()`. Once a newline is detected,
+  all subsequent records in the file use `seq()` directly.
+- `find_orfs()` now returns `Option<Vec<Orf>>` — `None` indicates the input contained
+  embedded newlines and should be retried with a normalized sequence.
+
 ## [2.0.2] - 2026-03-25
 
 ### Added

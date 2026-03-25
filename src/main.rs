@@ -94,17 +94,36 @@ fn main() {
         }),
     };
 
+    let mut needs_normalize = false;
     while let Some(Ok(record)) = reader.next() {
         let (name, comment) = split_header(record.id());
-        let seq = record.raw_seq();
-        let orfs = caller.find_orfs(name, comment, seq);
+        let (orfs, seq_for_transcript);
+        if needs_normalize {
+            let seq = record.seq();
+            orfs = caller.find_orfs(name, comment, &seq).unwrap();
+            seq_for_transcript = seq;
+        } else {
+            let raw = record.raw_seq();
+            match caller.find_orfs(name, comment, raw) {
+                Some(o) => {
+                    orfs = o;
+                    seq_for_transcript = std::borrow::Cow::Borrowed(raw);
+                }
+                None => {
+                    needs_normalize = true;
+                    let seq = record.seq();
+                    orfs = caller.find_orfs(name, comment, &seq).unwrap();
+                    seq_for_transcript = seq;
+                }
+            }
+        }
         for orf in orfs {
             if args.stop_codon_only && !orf.has_stop_codon {
                 continue;
             }
             if let Some(ref mut tw) = transcript_out {
                 writeln!(tw, "{}", orf.header()).unwrap();
-                let transcript = orf.transcript(seq);
+                let transcript = orf.transcript(seq_for_transcript.as_ref());
                 tw.write_all(&transcript).unwrap();
                 writeln!(tw).unwrap();
             }

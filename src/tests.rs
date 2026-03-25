@@ -14,7 +14,7 @@ fn run_orfm(
     while let Some(Ok(record)) = reader.next() {
         let (name, comment) = split_header(record.id());
         let seq = record.raw_seq();
-        let orfs = caller.find_orfs(name, comment, &seq);
+        let orfs = caller.find_orfs(name, comment, &seq).unwrap();
         for orf in orfs {
             output.push(orf.header());
             output.push(String::from_utf8(orf.protein).unwrap());
@@ -37,7 +37,7 @@ fn run_orfm_with_flags(
     while let Some(Ok(record)) = reader.next() {
         let (name, comment) = split_header(record.id());
         let seq = record.raw_seq();
-        let orfs = caller.find_orfs(name, comment, &seq);
+        let orfs = caller.find_orfs(name, comment, &seq).unwrap();
         for orf in orfs {
             if stop_codon_only && !orf.has_stop_codon {
                 continue;
@@ -67,7 +67,7 @@ fn run_orfm_with_transcripts(
     while let Some(Ok(record)) = reader.next() {
         let (name, comment) = split_header(record.id());
         let seq = record.raw_seq();
-        let orfs = caller.find_orfs(name, comment, &seq);
+        let orfs = caller.find_orfs(name, comment, &seq).unwrap();
         for orf in orfs {
             transcript_output.push(orf.header());
             transcript_output.push(String::from_utf8(orf.transcript(&seq)).unwrap());
@@ -402,6 +402,197 @@ fn test_print_stop_and_stop_codon_only() {
     assert!(ps_lines.iter().any(|l| l.contains("test_1_1_2")));
     assert!(ps_lines.iter().any(|l| l.contains("test_7_4_3")));
     assert!(!ps_lines.iter().any(|l| l.contains("test_17_2_4")));
+}
+
+/// Helper: run OrfCaller using the iterator API (which exercises the raw_seq/seq
+/// newline fallback logic). Returns formatted output lines.
+fn run_orfm_via_reader(
+    seq_input: &str,
+    min_length: usize,
+    table_id: usize,
+    position_limit: Option<usize>,
+) -> String {
+    let caller = OrfCaller::new(table_id, min_length, position_limit).unwrap();
+    let mut output = Vec::new();
+    for orf in caller.call_from_reader(seq_input.as_bytes()) {
+        output.push(orf.header());
+        output.push(String::from_utf8(orf.protein).unwrap());
+    }
+    output.join("\n") + if output.is_empty() { "" } else { "\n" }
+}
+
+/// find_orfs returns None when the sequence contains embedded newlines.
+#[test]
+fn test_find_orfs_returns_none_on_newline() {
+    let caller = OrfCaller::new(1, 3, None).unwrap();
+    assert!(caller.find_orfs("x", "", b"AATGTGAA").is_some());
+    assert!(caller.find_orfs("x", "", b"AATG\nTGAA").is_none());
+    assert!(caller.find_orfs("x", "", b"AATG\rTGAA").is_none());
+    assert!(caller.find_orfs("x", "", b"AATG\r\nTGAA").is_none());
+}
+
+/// Wrapped (multi-line) FASTA produces the same output as unwrapped.
+#[test]
+fn test_wrapped_fasta_matches_unwrapped() {
+    let unwrapped = ">eg\nAATGTGAA\n";
+    let wrapped = ">eg\nAATG\nTGAA\n";
+    assert_eq!(
+        run_orfm_via_reader(unwrapped, 3, 1, None),
+        run_orfm_via_reader(wrapped, 3, 1, None),
+    );
+}
+
+/// Wrapped FASTA with a longer sequence and realistic 60-char line width.
+#[test]
+fn test_wrapped_fasta_long_sequence() {
+    let seq = "ATGGATGCTGAAAAAAGATTGTTCTTAAAGGCATTAAAGGAAAAGTTTGAAGAAGACCCAAGAGAAAAATACACTAAGTTTCTATGTCTTTGGCGGATGG";
+    let unwrapped = format!(">seq\n{}\n", seq);
+    // Wrap at 60 chars
+    let wrapped_seq: String = seq
+        .as_bytes()
+        .chunks(60)
+        .map(|c| std::str::from_utf8(c).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let wrapped = format!(">seq\n{}\n", wrapped_seq);
+    assert_eq!(
+        run_orfm_via_reader(&unwrapped, 96, 1, None),
+        run_orfm_via_reader(&wrapped, 96, 1, None),
+    );
+}
+
+/// Multiple records where the second has wrapped lines — tests that the
+/// needs_normalize flag correctly switches mid-stream.
+#[test]
+fn test_wrapped_fasta_mixed_records() {
+    let input_unwrapped = ">a\nAATGTGAA\n>b\nAATGTGAA\n";
+    let input_mixed = ">a\nAATGTGAA\n>b\nAATG\nTGAA\n";
+    assert_eq!(
+        run_orfm_via_reader(input_unwrapped, 3, 1, None),
+        run_orfm_via_reader(input_mixed, 3, 1, None),
+    );
+}
+
+/// First record is wrapped — tests that fallback triggers on the very first record.
+#[test]
+fn test_wrapped_fasta_first_record() {
+    let input_unwrapped = ">a\nAATGTGAA\n>b\nAATGTGAA\n";
+    let input_wrapped = ">a\nAATG\nTGAA\n>b\nAATGTGAA\n";
+    assert_eq!(
+        run_orfm_via_reader(input_unwrapped, 3, 1, None),
+        run_orfm_via_reader(input_wrapped, 3, 1, None),
+    );
+}
+
+/// FASTQ input produces the same ORFs as equivalent FASTA input.
+#[test]
+fn test_fastq_matches_fasta() {
+    let fasta = ">eg\nAATGTGAA\n";
+    let fastq = "@eg\nAATGTGAA\n+\nIIIIIIII\n";
+    assert_eq!(run_orfm(fasta, 3, 1, None), run_orfm(fastq, 3, 1, None),);
+}
+
+/// FASTQ input works through the iterator API (newline detection path).
+#[test]
+fn test_fastq_via_reader() {
+    let fasta = ">eg\nAATGTGAA\n";
+    let fastq = "@eg\nAATGTGAA\n+\nIIIIIIII\n";
+    assert_eq!(
+        run_orfm_via_reader(fasta, 3, 1, None),
+        run_orfm_via_reader(fastq, 3, 1, None),
+    );
+}
+
+/// FASTQ with a longer sequence preserves ORF output.
+#[test]
+fn test_fastq_long_sequence() {
+    let seq = "ATGGATGCTGAAAAAAGATTGTTCTTAAAGGCATTAAAGGAAAAGTTTGAAGAAGACCCAAGAGAAAAATACACTAAGTTTCTATGTCTTTGGCGGATGG";
+    let qual = "I".repeat(seq.len());
+    let fasta = format!(">seq\n{}\n", seq);
+    let fastq = format!("@seq\n{}\n+\n{}\n", seq, qual);
+    assert_eq!(
+        run_orfm_via_reader(&fasta, 96, 1, None),
+        run_orfm_via_reader(&fastq, 96, 1, None),
+    );
+}
+
+/// Multiple FASTQ records produce the same output as equivalent FASTA records.
+#[test]
+fn test_fastq_multiple_records() {
+    let fasta = ">a\nAATGTGAA\n>b\nTTAANAGGGGGGGGGG\n";
+    let fastq = "@a\nAATGTGAA\n+\nIIIIIIII\n@b\nTTAANAGGGGGGGGGG\n+\nIIIIIIIIIIIIIIII\n";
+    assert_eq!(
+        run_orfm_via_reader(fasta, 3, 1, None),
+        run_orfm_via_reader(fastq, 3, 1, None),
+    );
+}
+
+/// FASTQ with comment in header preserves the comment in ORF output.
+#[test]
+fn test_fastq_with_comment() {
+    let seq = "ATGGATGCTGAAAAAAGATTGTTCTTAAAGGCATTAAAGGAAAAGTTTGAAGAAGACCCAAGAGAAAAATACACTAAGTTTCTATGTCTTTGGCGGATGG";
+    let qual = "I".repeat(seq.len());
+    let fasta = format!(">638202197 some comment\n{}\n", seq);
+    let fastq = format!("@638202197 some comment\n{}\n+\n{}\n", seq, qual);
+    assert_eq!(
+        run_orfm_via_reader(&fasta, 96, 1, None),
+        run_orfm_via_reader(&fastq, 96, 1, None),
+    );
+}
+
+/// Gzipped FASTA produces the same output as uncompressed FASTA.
+#[test]
+fn test_gzipped_fasta() {
+    use std::io::Write;
+    let fasta = ">eg\nAATGTGAA\n";
+    let caller = OrfCaller::new(1, 3, None).unwrap();
+
+    // Write gzipped FASTA to temp file
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    {
+        let mut gz = flate2::write::GzEncoder::new(&tmp, flate2::Compression::default());
+        gz.write_all(fasta.as_bytes()).unwrap();
+        gz.finish().unwrap();
+    }
+
+    let orfs_gz: Vec<_> = caller
+        .call_from_file(tmp.path().to_str().unwrap())
+        .collect();
+    let orfs_plain: Vec<_> = caller.call_from_reader(fasta.as_bytes()).collect();
+
+    assert_eq!(orfs_gz.len(), orfs_plain.len());
+    for (a, b) in orfs_gz.iter().zip(orfs_plain.iter()) {
+        assert_eq!(a.header(), b.header());
+        assert_eq!(a.protein, b.protein);
+    }
+}
+
+/// Gzipped FASTQ produces the same output as equivalent uncompressed FASTA.
+#[test]
+fn test_gzipped_fastq() {
+    use std::io::Write;
+    let fasta = ">eg\nAATGTGAA\n";
+    let fastq = "@eg\nAATGTGAA\n+\nIIIIIIII\n";
+    let caller = OrfCaller::new(1, 3, None).unwrap();
+
+    // Write gzipped FASTQ to temp file
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    {
+        let mut gz = flate2::write::GzEncoder::new(&tmp, flate2::Compression::default());
+        gz.write_all(fastq.as_bytes()).unwrap();
+        gz.finish().unwrap();
+    }
+
+    let orfs_gz: Vec<_> = caller
+        .call_from_file(tmp.path().to_str().unwrap())
+        .collect();
+    let orfs_plain: Vec<_> = caller.call_from_reader(fasta.as_bytes()).collect();
+
+    assert_eq!(orfs_gz.len(), orfs_plain.len());
+    for (a, b) in orfs_gz.iter().zip(orfs_plain.iter()) {
+        assert_eq!(a.header(), b.header());
+        assert_eq!(a.protein, b.protein);
+    }
 }
 
 /// Integration test: compare output against the original OrfM binary if available.
