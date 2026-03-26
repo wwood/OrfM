@@ -131,30 +131,42 @@ for orf in &orfs {
 
 ## Benchmarking
 
-A Snakefile is included for comparing performance against the original C OrfM. It generates random sequences, runs both tools, checks output correctness, and collects wall-clock time and memory usage.
+Walltime (seconds) results on a Linux x86-64 server, on 1 million random 150 bp sequences:
+
+```
+┌─────────────────┬───────────────┬──────────────────┬────────┬┬────────────────────────┐
+│      Input      │ OrfM v1.4 (C) │ OrfM v2.1 (Rust) │ getorf ││ OrfM (Rust) / OrfM (C) │
+├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
+│ fasta_unwrapped │          2.15 │             1.68 │   8.99 ││                  0.78x │
+├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
+│ fasta_wrapped   │          2.18 │             1.70 │   8.85 ││                  0.78x │
+├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
+│ fasta_gzipped   │          2.58 │             1.91 │    N/A ││                  0.74x │
+├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
+│ fastq           │          2.35 │             1.83 │   8.95 ││                  0.78x │
+├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
+│ fastq_gzipped   │          2.77 │             1.70 │    N/A ││                  0.61x │
+└─────────────────┴───────────────┴──────────────────┴────────┴┴────────────────────────┘
+```
+
+- A ratio < 1 means OrfM v2.1 (Rust) is faster than OrfM v1.4 (C); Rust is 22–39% faster depending on input type.
+- getorf (EMBOSS) does not support gzipped input (N/A). On plain FASTA/FASTQ it is ~4–5× slower than OrfM v2.1 (Rust).
+- Peak RSS memory usage is similar across all programs (~85 MB).
+- All replicates produce identical output (verified by `diff`).
+
+A Snakefile is included for comparing performance against the original C OrfM and getorf (EMBOSS). It generates 1 million random 150 bp sequences in various formats, runs all three tools (3 replicates), checks output correctness, and collects wall-clock time and peak RSS memory.
 
 ```bash
-snakemake -j4
+pixi run snakemake -j1
 cat benchmark/results.tsv
 cat benchmark/correctness.txt
 ```
-When I ran it, orfm-rs was the winner by ~5% in walltime:
 
-| tool | replicate | wall_clock_s | max_rss_kb |
-|------|-----------|--------------|------------|
-| orfm_c | 1 | 2.11 | 16088 |
-| orfm_rs | 1 | 1.99 | 15572 |
-| orfm_c | 2 | 2.1 | 15432 |
-| orfm_rs | 2 | 2.0 | 16116 |
-| orfm_c | 3 | 2.12 | 16164 |
-| orfm_rs | 3 | 2.02 | 16148 |
-
-Requires the C OrfM binary at `~/git/OrfM/orfm` (this path can be changed in the Snakefile).
+Requires the C OrfM binary at `~/git/OrfM/orfm` (path configurable in the Snakefile). getorf is installed automatically via the pixi environment (`emboss` package).
 
 ## Notes
 
-- Pure Rust, no C dependencies
-- Exposes a library API with an iterator over translated ORFs
+- Exposes a Rust library API with an iterator over translated ORFs
 - Supports all codon tables that OrfM supports (NCBI tables 1–25)
 - Uses [needletail](https://github.com/onecodex/needletail) for sequence parsing and [aho-corasick](https://github.com/BurntSushi/aho-corasick) for stop codon detection
 

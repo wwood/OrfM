@@ -1,6 +1,6 @@
 [package]
 name = "orfm"
-version = "2.0.3"
+version = "2.1.0"
 edition = "2021"
 description = "A pure-Rust port of OrfM - a simple and not slow open reading frame (ORF) caller"
 license = "LGPL-3.0"
@@ -17,12 +17,16 @@ path = "src/main.rs"
 
 [dependencies]
 aho-corasick = "1"
-needletail = "0.7"
+needletail = { version = "0.7", default-features = false, features = ["compression"] }
+fastq = "0.6"
 clap = { version = "4", features = ["derive"] }
+# Force zlib-ng backend for all flate2 users (needletail, fastq crate).
+# needletail's default enables flate2/rust_backend (miniz_oxide); we disable
+# that and let flate2 use only zlib-ng via this direct dependency.
+flate2 = { version = "1", default-features = false, features = ["zlib-ng"] }
 
 [dev-dependencies]
 tempfile = "3"
-flate2 = "1"
 
 [profile.release]
 lto = true

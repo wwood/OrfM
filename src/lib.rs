@@ -2,11 +2,11 @@ use aho_corasick::AhoCorasick;
 use std::io;
 
 mod codon_tables;
-pub use codon_tables::get_codon_table;
+use codon_tables::get_codon_table;
 
 /// Compare two semver-style version strings (MAJOR.MINOR.PATCH).
 /// Returns true if `current` >= `required`.
-pub fn version_at_least(current: &str, required: &str) -> bool {
+fn version_at_least(current: &str, required: &str) -> bool {
     let parse = |s: &str| -> (u64, u64, u64) {
         let mut parts = s.split('.').filter_map(|p| p.parse::<u64>().ok());
         (
@@ -88,7 +88,7 @@ pub struct OrfCaller {
 
 /// Reverse complement a single base.
 #[inline]
-pub fn revcom_base(b: u8) -> u8 {
+fn revcom_base(b: u8) -> u8 {
     match b {
         b'A' => b'T',
         b'T' => b'A',
@@ -117,9 +117,38 @@ fn split_header(header: &[u8]) -> (&str, &str) {
 /// Build a fast 3-byte-indexed translation lookup table.
 /// Index: (b0 << 16) | (b1 << 8) | b2 for forward codons
 /// Index: 128 + (b0 << 16) | (b1 << 8) | b2 for reverse complement lookup
+/// All valid IUPAC DNA/RNA characters (both cases).
+/// Codons containing only these bytes produce b'X' (unknown amino acid).
+/// Any byte outside this set leaves the table entry at 0, triggering a panic on translation.
+const IUPAC_CHARS: &[u8] = b"ACGTURYWSKMBDHVNacgturywskmbdhvn";
+
+/// Return true if `b` is a valid IUPAC DNA/RNA character.
+#[inline]
+fn is_valid_iupac(b: u8) -> bool {
+    matches!(
+        b | 0x20,
+        b'a' | b'c'
+            | b'g'
+            | b't'
+            | b'u'
+            | b'r'
+            | b'y'
+            | b's'
+            | b'w'
+            | b'k'
+            | b'm'
+            | b'b'
+            | b'd'
+            | b'h'
+            | b'v'
+            | b'n'
+    )
+}
+
 fn build_fast_table(codon_table: &[u8; 64]) -> Vec<u8> {
     let table_size = (1usize << 24) + 128;
-    let mut table = vec![b'X'; table_size];
+    // 0 is the sentinel for "invalid character" — never a valid amino acid output.
+    let mut table = vec![0u8; table_size];
 
     let order = [b'A', b'C', b'G', b'T'];
     let low_order = [b'a', b'c', b'g', b't'];
@@ -158,6 +187,24 @@ fn build_fast_table(codon_table: &[u8; 64]) -> Vec<u8> {
         }
     }
 
+    // Fill all IUPAC ambiguity codon combinations with b'X' (unknown amino acid).
+    // This must run after the ACGT loop so pure-ACGT entries keep their real amino acid.
+    // Any codon index not reachable by IUPAC bytes stays at 0 (invalid char sentinel).
+    for &b0 in IUPAC_CHARS {
+        for &b1 in IUPAC_CHARS {
+            for &b2 in IUPAC_CHARS {
+                let fwd = ((b0 as usize) << 16) | ((b1 as usize) << 8) | (b2 as usize);
+                if table[fwd] == 0 {
+                    table[fwd] = b'X';
+                }
+                let rev = 128 + (((b0 as usize) << 16) | ((b1 as usize) << 8) | (b2 as usize));
+                if table[rev] == 0 {
+                    table[rev] = b'X';
+                }
+            }
+        }
+    }
+
     table
 }
 
@@ -170,7 +217,20 @@ fn translate_forward(seq: &[u8], start: usize, nuc_len: usize, table: &[u8]) -> 
     for _ in 0..num_codons {
         let idx =
             ((seq[pos] as usize) << 16) | ((seq[pos + 1] as usize) << 8) | (seq[pos + 2] as usize);
-        protein.push(table[idx]);
+        let aa = table[idx];
+        if aa == 0 {
+            let bad = [seq[pos], seq[pos + 1], seq[pos + 2]]
+                .into_iter()
+                .enumerate()
+                .find(|(_, b)| !is_valid_iupac(*b))
+                .map(|(i, b)| (pos + i, b))
+                .unwrap_or((pos, seq[pos]));
+            panic!(
+                "Invalid character '{}' (0x{:02x}) at sequence position {}",
+                bad.1 as char, bad.1, bad.0
+            );
+        }
+        protein.push(aa);
         pos += 3;
     }
     protein
@@ -187,7 +247,20 @@ fn translate_reverse(seq: &[u8], start: usize, nuc_len: usize, table: &[u8]) -> 
             + (((seq[pos + 2] as usize) << 16)
                 | ((seq[pos + 1] as usize) << 8)
                 | (seq[pos] as usize));
-        protein.push(table[idx]);
+        let aa = table[idx];
+        if aa == 0 {
+            let bad = [seq[pos], seq[pos + 1], seq[pos + 2]]
+                .into_iter()
+                .enumerate()
+                .find(|(_, b)| !is_valid_iupac(*b))
+                .map(|(i, b)| (pos + i, b))
+                .unwrap_or((pos, seq[pos]));
+            panic!(
+                "Invalid character '{}' (0x{:02x}) at sequence position {}",
+                bad.1 as char, bad.1, bad.0
+            );
+        }
+        protein.push(aa);
         if pos < start + 3 {
             break;
         }
@@ -275,11 +348,12 @@ impl OrfCaller {
         })
     }
 
-    /// Find all ORFs in a single sequence.
+    /// Find all ORFs in a pre-normalized sequence (no embedded newlines).
     ///
-    /// Returns `Some(orfs)` on success, or `None` if a newline character was
-    /// detected in the sequence (caller should retry with a normalized sequence).
-    pub fn find_orfs(&self, name: &str, comment: &str, seq: &[u8]) -> Option<Vec<Orf>> {
+    /// Returns `Some(orfs)` on success, or `None` if a newline was detected
+    /// (caller should normalize and retry). Used internally by the iterators,
+    /// which track normalization state across records for efficiency.
+    fn find_orfs_internal(&self, name: &str, comment: &str, seq: &[u8]) -> Option<Vec<Orf>> {
         let seq_len = seq.len();
         if seq_len < self.min_length {
             return Some(Vec::new());
@@ -411,6 +485,40 @@ impl OrfCaller {
         Some(orfs)
     }
 
+    /// Find all ORFs in a sequence, normalizing it first if necessary.
+    ///
+    /// This is the convenient single-sequence entry point. It first attempts
+    /// to process `seq` directly; if embedded newlines are detected (wrapped
+    /// FASTA), it strips them and retries automatically.
+    ///
+    /// # Performance note
+    ///
+    /// When calling `find_orfs` in a loop over many sequences, each call
+    /// independently detects whether the sequence needs newline-stripping.
+    /// For unwrapped input this overhead is negligible (one fast memchr scan
+    /// per sequence), but once a wrapped sequence has been seen all subsequent
+    /// ones still pay that cost.
+    ///
+    /// For performance-critical multi-record processing, prefer
+    /// [`OrfCaller::call_from_file`] or [`OrfCaller::call_from_reader`], which
+    /// maintain a single `needs_normalize` flag across all records: after the
+    /// first wrapped sequence is encountered, every subsequent record is
+    /// normalized immediately without an extra scan.
+    pub fn find_orfs(&self, name: &str, comment: &str, seq: &[u8]) -> Vec<Orf> {
+        match self.find_orfs_internal(name, comment, seq) {
+            Some(orfs) => orfs,
+            None => {
+                // Newline detected — strip and retry
+                let normalized: Vec<u8> = seq
+                    .iter()
+                    .copied()
+                    .filter(|&b| b != b'\n' && b != b'\r')
+                    .collect();
+                self.find_orfs_internal(name, comment, &normalized).unwrap()
+            }
+        }
+    }
+
     /// Iterate over all ORFs from a FASTA/FASTQ file (or gzipped).
     pub fn call_from_file(&self, path: &str) -> OrfFileIter<'_> {
         OrfFileIter {
@@ -460,15 +568,19 @@ impl Iterator for OrfFileIter<'_> {
                     let (name, comment) = split_header(record.id());
                     if self.needs_normalize {
                         let seq = record.seq();
-                        self.current_orfs = self.caller.find_orfs(name, comment, &seq).unwrap();
+                        self.current_orfs =
+                            self.caller.find_orfs_internal(name, comment, &seq).unwrap();
                     } else {
-                        match self.caller.find_orfs(name, comment, record.raw_seq()) {
+                        match self
+                            .caller
+                            .find_orfs_internal(name, comment, record.raw_seq())
+                        {
                             Some(orfs) => self.current_orfs = orfs,
                             None => {
                                 self.needs_normalize = true;
                                 let seq = record.seq();
                                 self.current_orfs =
-                                    self.caller.find_orfs(name, comment, &seq).unwrap();
+                                    self.caller.find_orfs_internal(name, comment, &seq).unwrap();
                             }
                         }
                     }
@@ -506,15 +618,19 @@ impl Iterator for OrfReaderIter<'_> {
                     let (name, comment) = split_header(record.id());
                     if self.needs_normalize {
                         let seq = record.seq();
-                        self.current_orfs = self.caller.find_orfs(name, comment, &seq).unwrap();
+                        self.current_orfs =
+                            self.caller.find_orfs_internal(name, comment, &seq).unwrap();
                     } else {
-                        match self.caller.find_orfs(name, comment, record.raw_seq()) {
+                        match self
+                            .caller
+                            .find_orfs_internal(name, comment, record.raw_seq())
+                        {
                             Some(orfs) => self.current_orfs = orfs,
                             None => {
                                 self.needs_normalize = true;
                                 let seq = record.seq();
                                 self.current_orfs =
-                                    self.caller.find_orfs(name, comment, &seq).unwrap();
+                                    self.caller.find_orfs_internal(name, comment, &seq).unwrap();
                             }
                         }
                     }

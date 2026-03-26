@@ -1,5 +1,6 @@
 use clap::Parser;
-use std::io::{self, BufWriter, Write};
+use fastq::Record;
+use std::io::{self, BufWriter, Read, Write};
 
 #[derive(Parser)]
 #[command(
@@ -48,12 +49,207 @@ fn split_header(header: &[u8]) -> (&str, &str) {
     }
 }
 
+/// Detect whether a file is FASTQ (vs FASTA) by peeking at the first byte.
+/// For gzipped files, uses the file extension as a heuristic.
+fn is_fastq_file(path: &str) -> bool {
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut magic = [0u8; 2];
+    let Ok(n) = f.read(&mut magic) else {
+        return false;
+    };
+    if n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b {
+        // Gzipped — use extension heuristic
+        let p = path.to_lowercase();
+        p.ends_with(".fastq.gz") || p.ends_with(".fq.gz")
+    } else if n >= 1 {
+        magic[0] == b'@'
+    } else {
+        false
+    }
+}
+
+/// Check that a FASTQ sequence contains only valid DNA/RNA/IUPAC characters.
+/// Panics with a descriptive message if an invalid character is found.
+#[inline]
+fn validate_fastq_seq(seq: &[u8], header: &[u8]) {
+    for (i, &b) in seq.iter().enumerate() {
+        if !matches!(
+            b | 0x20,
+            b'a' | b'c'
+                | b'g'
+                | b't'
+                | b'u'
+                | b'r'
+                | b'y'
+                | b's'
+                | b'w'
+                | b'k'
+                | b'm'
+                | b'b'
+                | b'd'
+                | b'h'
+                | b'v'
+                | b'n'
+        ) {
+            let name = std::str::from_utf8(header).unwrap_or("<non-utf8>");
+            panic!(
+                "Invalid character '{}' (0x{:02x}) at position {} in FASTQ record '{}'. \
+                 Only DNA/RNA/IUPAC characters are allowed.",
+                b as char, b, i, name
+            );
+        }
+    }
+}
+
+/// Process a FASTQ file using the fastq crate's zero-copy callback API.
+fn process_fastq_file(
+    path: &str,
+    caller: &orfm::OrfCaller,
+    stop_codon_only: bool,
+    print_stop_codons: bool,
+    out: &mut BufWriter<io::StdoutLock>,
+    transcript_out: &mut Option<BufWriter<std::fs::File>>,
+    transcript_path: &Option<String>,
+) {
+    // FASTQ sequences are always single-line, so no newline normalization needed.
+    // The fastq crate auto-detects gzip/lz4 compression.
+    fastq::parse_path(Some(path), |parser| {
+        let mut first = true;
+        parser
+            .each(|record| {
+                let (name, comment) = split_header(record.head());
+                let seq = record.seq();
+                if first {
+                    validate_fastq_seq(seq, record.head());
+                    first = false;
+                }
+                let orfs = caller.find_orfs(name, comment, seq);
+                for orf in orfs {
+                    if stop_codon_only && !orf.has_stop_codon {
+                        continue;
+                    }
+                    if let Some(ref mut tw) = transcript_out {
+                        writeln!(tw, "{}", orf.header()).unwrap();
+                        let transcript = orf.transcript(seq);
+                        tw.write_all(&transcript).unwrap();
+                        writeln!(tw).unwrap();
+                    }
+                    writeln!(out, "{}", orf.header()).unwrap();
+                    out.write_all(&orf.protein).unwrap();
+                    if print_stop_codons && orf.has_stop_codon {
+                        out.write_all(b"*").unwrap();
+                    }
+                    writeln!(out).unwrap();
+                }
+                true
+            })
+            .unwrap_or_else(|e| {
+                eprintln!("Error parsing FASTQ file '{}': {}", path, e);
+                std::process::exit(1);
+            });
+    })
+    .unwrap_or_else(|e| {
+        eprintln!("Cannot open file '{}': {}", path, e);
+        std::process::exit(5);
+    });
+    // Ensure transcript file is opened even if no records processed
+    let _ = transcript_path;
+}
+
+/// Process a FASTQ stream from a reader using the fastq crate.
+fn process_fastq_reader(
+    reader: impl Read,
+    caller: &orfm::OrfCaller,
+    stop_codon_only: bool,
+    print_stop_codons: bool,
+    out: &mut BufWriter<io::StdoutLock>,
+    transcript_out: &mut Option<BufWriter<std::fs::File>>,
+) {
+    let parser = fastq::Parser::new(reader);
+    let mut first = true;
+    parser
+        .each(|record| {
+            let (name, comment) = split_header(record.head());
+            let seq = record.seq();
+            if first {
+                validate_fastq_seq(seq, record.head());
+                first = false;
+            }
+            let orfs = caller.find_orfs(name, comment, seq);
+            for orf in orfs {
+                if stop_codon_only && !orf.has_stop_codon {
+                    continue;
+                }
+                if let Some(ref mut tw) = transcript_out {
+                    writeln!(tw, "{}", orf.header()).unwrap();
+                    let transcript = orf.transcript(seq);
+                    tw.write_all(&transcript).unwrap();
+                    writeln!(tw).unwrap();
+                }
+                writeln!(out, "{}", orf.header()).unwrap();
+                out.write_all(&orf.protein).unwrap();
+                if print_stop_codons && orf.has_stop_codon {
+                    out.write_all(b"*").unwrap();
+                }
+                writeln!(out).unwrap();
+            }
+            true
+        })
+        .unwrap_or_else(|e| {
+            eprintln!("Error parsing FASTQ from stdin: {}", e);
+            std::process::exit(1);
+        });
+}
+
+/// Process FASTA/FASTQ using needletail (handles wrapped FASTA, all formats).
+fn process_with_needletail(
+    mut reader: Box<dyn needletail::FastxReader>,
+    caller: &orfm::OrfCaller,
+    stop_codon_only: bool,
+    print_stop_codons: bool,
+    out: &mut BufWriter<io::StdoutLock>,
+    transcript_out: &mut Option<BufWriter<std::fs::File>>,
+) {
+    while let Some(Ok(record)) = reader.next() {
+        let (name, comment) = split_header(record.id());
+        let seq = record.seq();
+        let orfs = caller.find_orfs(name, comment, &seq);
+        for orf in orfs {
+            if stop_codon_only && !orf.has_stop_codon {
+                continue;
+            }
+            if let Some(ref mut tw) = transcript_out {
+                writeln!(tw, "{}", orf.header()).unwrap();
+                let transcript = orf.transcript(&seq);
+                tw.write_all(&transcript).unwrap();
+                writeln!(tw).unwrap();
+            }
+            writeln!(out, "{}", orf.header()).unwrap();
+            out.write_all(&orf.protein).unwrap();
+            if print_stop_codons && orf.has_stop_codon {
+                out.write_all(b"*").unwrap();
+            }
+            writeln!(out).unwrap();
+        }
+    }
+}
+
 fn main() {
     let args = Args::parse();
 
     if let Some(ref required) = args.required_version {
         let current = env!("CARGO_PKG_VERSION");
-        if !orfm::version_at_least(current, required) {
+        let parse = |s: &str| -> (u64, u64, u64) {
+            let mut p = s.split('.').filter_map(|x| x.parse::<u64>().ok());
+            (
+                p.next().unwrap_or(0),
+                p.next().unwrap_or(0),
+                p.next().unwrap_or(0),
+            )
+        };
+        if parse(current) < parse(required) {
             eprintln!(
                 "ERROR: OrfM version {} is less than required version {}",
                 current, required
@@ -83,56 +279,67 @@ fn main() {
             BufWriter::new(f)
         });
 
-    let mut reader: Box<dyn needletail::FastxReader> = match &args.input {
-        Some(path) => needletail::parse_fastx_file(path).unwrap_or_else(|e| {
-            eprintln!("Cannot open file '{}': {}", path, e);
-            std::process::exit(5);
-        }),
-        None => needletail::parse_fastx_reader(io::stdin()).unwrap_or_else(|e| {
-            eprintln!("Cannot read stdin: {}", e);
-            std::process::exit(5);
-        }),
-    };
-
-    let mut needs_normalize = false;
-    while let Some(Ok(record)) = reader.next() {
-        let (name, comment) = split_header(record.id());
-        let (orfs, seq_for_transcript);
-        if needs_normalize {
-            let seq = record.seq();
-            orfs = caller.find_orfs(name, comment, &seq).unwrap();
-            seq_for_transcript = seq;
-        } else {
-            let raw = record.raw_seq();
-            match caller.find_orfs(name, comment, raw) {
-                Some(o) => {
-                    orfs = o;
-                    seq_for_transcript = std::borrow::Cow::Borrowed(raw);
-                }
-                None => {
-                    needs_normalize = true;
-                    let seq = record.seq();
-                    orfs = caller.find_orfs(name, comment, &seq).unwrap();
-                    seq_for_transcript = seq;
-                }
+    match &args.input {
+        Some(path) => {
+            if is_fastq_file(path) {
+                // Use the fastq crate's zero-copy parser for FASTQ input
+                process_fastq_file(
+                    path,
+                    &caller,
+                    args.stop_codon_only,
+                    args.print_stop_codons,
+                    &mut out,
+                    &mut transcript_out,
+                    &args.transcript,
+                );
+            } else {
+                // Use needletail for FASTA input (handles wrapped sequences)
+                let reader = needletail::parse_fastx_file(path).unwrap_or_else(|e| {
+                    eprintln!("Cannot open file '{}': {}", path, e);
+                    std::process::exit(5);
+                });
+                process_with_needletail(
+                    reader,
+                    &caller,
+                    args.stop_codon_only,
+                    args.print_stop_codons,
+                    &mut out,
+                    &mut transcript_out,
+                );
             }
         }
-        for orf in orfs {
-            if args.stop_codon_only && !orf.has_stop_codon {
-                continue;
+        None => {
+            // stdin: read first byte to determine format, then chain it back
+            let stdin = io::stdin();
+            let mut first_byte = [0u8; 1];
+            let n = stdin.lock().read(&mut first_byte).unwrap_or(0);
+            if n == 1 && first_byte[0] == b'@' {
+                // FASTQ from stdin — use fastq crate
+                let chained = io::Cursor::new(first_byte.to_vec()).chain(stdin);
+                process_fastq_reader(
+                    chained,
+                    &caller,
+                    args.stop_codon_only,
+                    args.print_stop_codons,
+                    &mut out,
+                    &mut transcript_out,
+                );
+            } else {
+                // FASTA (or gzipped) from stdin — use needletail
+                let chained = io::Cursor::new(first_byte[..n].to_vec()).chain(stdin);
+                let reader = needletail::parse_fastx_reader(chained).unwrap_or_else(|e| {
+                    eprintln!("Cannot read stdin: {}", e);
+                    std::process::exit(5);
+                });
+                process_with_needletail(
+                    reader,
+                    &caller,
+                    args.stop_codon_only,
+                    args.print_stop_codons,
+                    &mut out,
+                    &mut transcript_out,
+                );
             }
-            if let Some(ref mut tw) = transcript_out {
-                writeln!(tw, "{}", orf.header()).unwrap();
-                let transcript = orf.transcript(seq_for_transcript.as_ref());
-                tw.write_all(&transcript).unwrap();
-                writeln!(tw).unwrap();
-            }
-            writeln!(out, "{}", orf.header()).unwrap();
-            out.write_all(&orf.protein).unwrap();
-            if args.print_stop_codons && orf.has_stop_codon {
-                out.write_all(b"*").unwrap();
-            }
-            writeln!(out).unwrap();
         }
     }
 }

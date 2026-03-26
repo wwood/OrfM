@@ -14,7 +14,7 @@ fn run_orfm(
     while let Some(Ok(record)) = reader.next() {
         let (name, comment) = split_header(record.id());
         let seq = record.raw_seq();
-        let orfs = caller.find_orfs(name, comment, &seq).unwrap();
+        let orfs = caller.find_orfs(name, comment, &seq);
         for orf in orfs {
             output.push(orf.header());
             output.push(String::from_utf8(orf.protein).unwrap());
@@ -37,7 +37,7 @@ fn run_orfm_with_flags(
     while let Some(Ok(record)) = reader.next() {
         let (name, comment) = split_header(record.id());
         let seq = record.raw_seq();
-        let orfs = caller.find_orfs(name, comment, &seq).unwrap();
+        let orfs = caller.find_orfs(name, comment, &seq);
         for orf in orfs {
             if stop_codon_only && !orf.has_stop_codon {
                 continue;
@@ -67,7 +67,7 @@ fn run_orfm_with_transcripts(
     while let Some(Ok(record)) = reader.next() {
         let (name, comment) = split_header(record.id());
         let seq = record.raw_seq();
-        let orfs = caller.find_orfs(name, comment, &seq).unwrap();
+        let orfs = caller.find_orfs(name, comment, &seq);
         for orf in orfs {
             transcript_output.push(orf.header());
             transcript_output.push(String::from_utf8(orf.transcript(&seq)).unwrap());
@@ -421,14 +421,16 @@ fn run_orfm_via_reader(
     output.join("\n") + if output.is_empty() { "" } else { "\n" }
 }
 
-/// find_orfs returns None when the sequence contains embedded newlines.
+/// find_orfs_internal returns None when the sequence contains embedded newlines.
 #[test]
 fn test_find_orfs_returns_none_on_newline() {
     let caller = OrfCaller::new(1, 3, None).unwrap();
-    assert!(caller.find_orfs("x", "", b"AATGTGAA").is_some());
-    assert!(caller.find_orfs("x", "", b"AATG\nTGAA").is_none());
-    assert!(caller.find_orfs("x", "", b"AATG\rTGAA").is_none());
-    assert!(caller.find_orfs("x", "", b"AATG\r\nTGAA").is_none());
+    assert!(caller.find_orfs_internal("x", "", b"AATGTGAA").is_some());
+    assert!(caller.find_orfs_internal("x", "", b"AATG\nTGAA").is_none());
+    assert!(caller.find_orfs_internal("x", "", b"AATG\rTGAA").is_none());
+    assert!(caller
+        .find_orfs_internal("x", "", b"AATG\r\nTGAA")
+        .is_none());
 }
 
 /// Wrapped (multi-line) FASTA produces the same output as unwrapped.
@@ -514,6 +516,29 @@ fn test_fastq_long_sequence() {
         run_orfm_via_reader(&fasta, 96, 1, None),
         run_orfm_via_reader(&fastq, 96, 1, None),
     );
+}
+
+/// IUPAC ambiguity codes in a codon produce 'X', not a panic.
+#[test]
+fn test_iupac_produces_x() {
+    // Y = C or T, so TYA is not a valid single amino acid → X
+    // Sequence: TTAYNA — TTY=X, NA... just check we get X not a panic
+    let input = ">eg\nTTAYNA\n";
+    let result = run_orfm(input, 6, 1, None);
+    assert!(
+        result.contains('X'),
+        "Expected X in protein for IUPAC codon, got: {}",
+        result
+    );
+}
+
+/// A non-IUPAC character inside a translated ORF panics.
+#[test]
+#[should_panic(expected = "Invalid character '6'")]
+fn test_invalid_char_panics() {
+    // '6' is not a valid IUPAC character and falls inside an ORF
+    let input = ">eg\nTTA6NAGGGGGGGGG\n";
+    run_orfm(input, 6, 1, None);
 }
 
 /// Multiple FASTQ records produce the same output as equivalent FASTA records.
