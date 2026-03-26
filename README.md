@@ -137,19 +137,19 @@ Walltime (seconds) results on a Linux x86-64 server, on 1 million random 150 bp 
 ┌─────────────────┬───────────────┬──────────────────┬────────┬┬────────────────────────┐
 │      Input      │ OrfM v1.4 (C) │ OrfM v2.1 (Rust) │ getorf ││ OrfM (Rust) / OrfM (C) │
 ├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
-│ fasta_unwrapped │          2.15 │             1.68 │   8.99 ││                  0.78x │
+│ fasta_unwrapped │          2.14 │             1.67 │   8.77 ││                  0.78x │
 ├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
-│ fasta_wrapped   │          2.18 │             1.70 │   8.85 ││                  0.78x │
+│ fasta_wrapped   │          2.14 │             1.72 │   8.86 ││                  0.81x │
 ├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
-│ fasta_gzipped   │          2.58 │             1.91 │    N/A ││                  0.74x │
+│ fasta_gzipped   │          2.57 │             1.92 │    N/A ││                  0.74x │
 ├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
-│ fastq           │          2.35 │             1.83 │   8.95 ││                  0.78x │
+│ fastq           │          2.28 │             1.71 │   9.05 ││                  0.75x │
 ├─────────────────┼───────────────┼──────────────────┼────────┼┼────────────────────────┤
-│ fastq_gzipped   │          2.77 │             1.70 │    N/A ││                  0.61x │
+│ fastq_gzipped   │          2.75 │             1.67 │    N/A ││                  0.61x │
 └─────────────────┴───────────────┴──────────────────┴────────┴┴────────────────────────┘
 ```
 
-- A ratio < 1 means OrfM v2.1 (Rust) is faster than OrfM v1.4 (C); Rust is 22–39% faster depending on input type.
+- A ratio < 1 means OrfM v2.1 (Rust) is faster than OrfM v1.4 (C); Rust is 19–39% faster depending on input type.
 - getorf (EMBOSS) does not support gzipped input (N/A). On plain FASTA/FASTQ it is ~4–5× slower than OrfM v2.1 (Rust).
 - Peak RSS memory usage is similar across all programs (~85 MB).
 - All replicates produce identical output (verified by `diff`).

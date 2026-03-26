@@ -4,20 +4,6 @@ use std::io;
 mod codon_tables;
 use codon_tables::get_codon_table;
 
-/// Compare two semver-style version strings (MAJOR.MINOR.PATCH).
-/// Returns true if `current` >= `required`.
-fn version_at_least(current: &str, required: &str) -> bool {
-    let parse = |s: &str| -> (u64, u64, u64) {
-        let mut parts = s.split('.').filter_map(|p| p.parse::<u64>().ok());
-        (
-            parts.next().unwrap_or(0),
-            parts.next().unwrap_or(0),
-            parts.next().unwrap_or(0),
-        )
-    };
-    parse(current) >= parse(required)
-}
-
 /// A single open reading frame found in a sequence.
 #[derive(Debug, Clone)]
 pub struct Orf {

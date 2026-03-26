@@ -1,5 +1,6 @@
 use clap::Parser;
 use fastq::Record;
+use flate2::read::GzDecoder;
 use std::io::{self, BufWriter, Read, Write};
 
 #[derive(Parser)]
@@ -49,8 +50,8 @@ fn split_header(header: &[u8]) -> (&str, &str) {
     }
 }
 
-/// Detect whether a file is FASTQ (vs FASTA) by peeking at the first byte.
-/// For gzipped files, uses the file extension as a heuristic.
+/// Detect whether a file is FASTQ (vs FASTA) by peeking at the first content byte.
+/// For gzipped files, decompresses just enough to read that byte.
 fn is_fastq_file(path: &str) -> bool {
     let Ok(mut f) = std::fs::File::open(path) else {
         return false;
@@ -60,9 +61,13 @@ fn is_fastq_file(path: &str) -> bool {
         return false;
     };
     if n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b {
-        // Gzipped — use extension heuristic
-        let p = path.to_lowercase();
-        p.ends_with(".fastq.gz") || p.ends_with(".fq.gz")
+        // Gzipped — reopen and decompress to read first content byte
+        let Ok(f2) = std::fs::File::open(path) else {
+            return false;
+        };
+        let mut gz = GzDecoder::new(f2);
+        let mut first = [0u8; 1];
+        matches!(gz.read(&mut first), Ok(1) if first[0] == b'@')
     } else if n >= 1 {
         magic[0] == b'@'
     } else {
