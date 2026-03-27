@@ -6,6 +6,8 @@ ORFM_RS = "/tmp/orfm-target/release/orfm"
 # Number of random sequences and their lengths for benchmarking
 NUM_SEQS = 1_000_000
 SEQ_LEN = 150
+LONG_NUM_SEQS = 100
+LONG_SEQ_LEN = 1_000_000
 REPLICATES = range(1, 4)
 
 # Input types and their file extensions
@@ -15,6 +17,11 @@ INPUT_TYPES = {
     "fasta_gzipped": ".fasta.gz",
     "fastq": ".fastq",
     "fastq_gzipped": ".fastq.gz",
+}
+# Long-sequence benchmark types (stored in LONG_DATA_DIR = /tmp)
+LONG_INPUT_TYPES = {
+    "long_fasta": ".fasta",
+    "long_fasta_iupac": ".fasta",
 }
 
 # getorf (EMBOSS) sequence format prefix for each input type; None = not supported
@@ -27,10 +34,14 @@ GETORF_FORMAT = {
 }
 
 DATA_DIR = "benchmark/data"
+LONG_DATA_DIR = "/tmp/orfm_long_data"
+
+ruleorder: generate_long_fasta_iupac > generate_long_fasta
 
 rule all:
     input:
         "benchmark/results.tsv",
+        "benchmark/results_long.tsv",
         "benchmark/correctness.txt"
 
 rule build_rust:
@@ -115,6 +126,171 @@ rule generate_fastq_gzipped:
         f"{DATA_DIR}/random_seqs_fastq_gzipped_{{rep}}.fastq.gz"
     shell:
         "gzip -c {input} > {output}"
+
+rule generate_long_fasta:
+    output:
+        f"{LONG_DATA_DIR}/random_seqs_long_fasta_{{rep}}.fasta"
+    params:
+        num_seqs=LONG_NUM_SEQS,
+        seq_len=LONG_SEQ_LEN
+    shell:
+        """
+        mkdir -p {LONG_DATA_DIR}
+        python3 -c "
+import random
+random.seed({wildcards.rep})
+bases = 'ACGT'
+with open('{output}', 'w') as f:
+    for i in range({params.num_seqs}):
+        seq = ''.join(random.choices(bases, k={params.seq_len}))
+        f.write(f'>seq_{{i}}\\n{{seq}}\\n')
+        "
+        """
+
+rule generate_long_fasta_iupac:
+    wildcard_constraints:
+        rep=r"\d+"
+    output:
+        f"{LONG_DATA_DIR}/random_seqs_long_fasta_iupac_{{rep}}.fasta"
+    params:
+        num_seqs=LONG_NUM_SEQS,
+        seq_len=LONG_SEQ_LEN
+    shell:
+        """
+        mkdir -p {LONG_DATA_DIR}
+        python3 -c "
+import random
+random.seed({wildcards.rep})
+bases = 'ACGT'
+iupac_extra = 'RYSWKMBDHVN'
+with open('{output}', 'w') as f:
+    for i in range({params.num_seqs}):
+        seq = list(''.join(random.choices(bases, k={params.seq_len})))
+        for pos in random.sample(range({params.seq_len}), int({params.seq_len} * 0.04)):
+            seq[pos] = random.choice(iupac_extra)
+        f.write(f'>seq_{{i}}\\n' + ''.join(seq) + '\\n')
+        "
+        """
+
+
+def get_long_input_file(wildcards):
+    itype = wildcards.itype
+    rep = wildcards.rep
+    ext = LONG_INPUT_TYPES[itype]
+    return f"{LONG_DATA_DIR}/random_seqs_{itype}_{rep}{ext}"
+
+
+rule benchmark_long_orfm_c:
+    input:
+        seqs=get_long_input_file,
+        bin=ORFM_C
+    output:
+        time="benchmark/time_long_c_{itype}_{rep}.txt",
+        result="/tmp/orfm_long_output/output_long_c_{itype}_{rep}.fasta"
+    wildcard_constraints:
+        itype="|".join(LONG_INPUT_TYPES.keys()),
+        rep=r"\d+"
+    run:
+        import subprocess, time, resource
+        os.makedirs("/tmp/orfm_long_output", exist_ok=True)
+        start = time.monotonic()
+        with open(output.result, 'w') as out:
+            subprocess.run([input.bin, input.seqs], stdout=out, check=True)
+        elapsed = time.monotonic() - start
+        rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
+        with open(output.time, 'w') as f:
+            f.write(f"wall_clock_s\t{elapsed:.3f}\nmax_rss_kb\t{rusage.ru_maxrss}\n")
+
+
+rule benchmark_long_orfm_rs:
+    input:
+        seqs=get_long_input_file,
+        bin=ORFM_RS
+    output:
+        time="benchmark/time_long_rs_{itype}_{rep}.txt",
+        result="/tmp/orfm_long_output/output_long_rs_{itype}_{rep}.fasta"
+    wildcard_constraints:
+        itype="|".join(LONG_INPUT_TYPES.keys()),
+        rep=r"\d+"
+    run:
+        import subprocess, time, resource
+        os.makedirs("/tmp/orfm_long_output", exist_ok=True)
+        start = time.monotonic()
+        with open(output.result, 'w') as out:
+            subprocess.run([input.bin, input.seqs], stdout=out, check=True)
+        elapsed = time.monotonic() - start
+        rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
+        with open(output.time, 'w') as f:
+            f.write(f"wall_clock_s\t{elapsed:.3f}\nmax_rss_kb\t{rusage.ru_maxrss}\n")
+
+
+rule collect_long_results:
+    input:
+        c_times=expand("benchmark/time_long_c_{itype}_{rep}.txt", itype=LONG_INPUT_TYPES, rep=REPLICATES),
+        rs_times=expand("benchmark/time_long_rs_{itype}_{rep}.txt", itype=LONG_INPUT_TYPES, rep=REPLICATES),
+    output:
+        "benchmark/results_long.tsv"
+    run:
+        import statistics
+
+        def read_time(prefix, itype, rep):
+            vals = {}
+            with open(f"benchmark/time_long_{prefix}_{itype}_{rep}.txt") as f:
+                for line in f:
+                    k, v = line.strip().split("\t")
+                    vals[k] = v
+            return vals.get("wall_clock_s", "N/A"), vals.get("max_rss_kb", "N/A")
+
+        with open(output[0], 'w') as out:
+            out.write("tool\tinput_type\treplicate\twall_clock_s\tmax_rss_kb\n")
+            for itype in LONG_INPUT_TYPES:
+                for rep in REPLICATES:
+                    for tool, prefix in [("orfm_c", "c"), ("orfm_rs", "rs")]:
+                        wall, rss = read_time(prefix, itype, rep)
+                        out.write(f"{tool}\t{itype}\t{rep}\t{wall}\t{rss}\n")
+
+        def median_or_na(vals):
+            nums = [float(v) for v in vals if v != "N/A"]
+            return statistics.median(nums) if nums else None
+
+        data = {}
+        for itype in LONG_INPUT_TYPES:
+            for rep in REPLICATES:
+                for tool, prefix in [("C", "c"), ("Rs", "rs")]:
+                    wall, rss = read_time(prefix, itype, rep)
+                    key = (tool, itype)
+                    if key not in data:
+                        data[key] = {"wall": []}
+                    data[key]["wall"].append(wall)
+
+        col_w = max(max(len(t) for t in LONG_INPUT_TYPES), 5)
+        ts_w, rat_w = 8, 6
+
+        def fmt_s(v):      return f"{v:.2f}" if v is not None else "N/A"
+        def fmt_rat(c, r): return f"{r/c:.2f}x" if (c and r) else "N/A"
+
+        cols = [("Input", col_w), ("C (s)", ts_w), ("Rs (s)", ts_w), ("Rs/C", rat_w)]
+
+        def hline(l, m, r):
+            return l + m.join("─" * (w + 2) for _, w in cols) + r
+
+        lines = [hline("┌", "┬", "┐")]
+        lines.append("│" + "│".join(f" {h:^{w}} " for h, w in cols) + "│")
+        lines.append(hline("├", "┼", "┤"))
+        for i, itype in enumerate(LONG_INPUT_TYPES):
+            if i > 0:
+                lines.append(hline("├", "┼", "┤"))
+            c_w  = median_or_na(data[("C",  itype)]["wall"])
+            r_w  = median_or_na(data[("Rs", itype)]["wall"])
+            cells = [
+                f" {itype:<{col_w}} ",
+                f" {fmt_s(c_w):>{ts_w}} ",
+                f" {fmt_s(r_w):>{ts_w}} ",
+                f" {fmt_rat(c_w, r_w):>{rat_w}} ",
+            ]
+            lines.append("│" + "│".join(cells) + "│")
+        lines.append(hline("└", "┴", "┘"))
+        print("\n".join(lines))
 
 
 def get_input_file(wildcards):
@@ -219,107 +395,73 @@ rule collect_results:
     output:
         "benchmark/results.tsv"
     run:
+        import statistics
+
+        def read_time(prefix, itype, rep):
+            vals = {}
+            with open(f"benchmark/time_{prefix}_{itype}_{rep}.txt") as f:
+                for line in f:
+                    k, v = line.strip().split("\t")
+                    vals[k] = v
+            return vals.get("wall_clock_s", "N/A"), vals.get("max_rss_kb", "N/A")
+
         with open(output[0], 'w') as out:
             out.write("tool\tinput_type\treplicate\twall_clock_s\tmax_rss_kb\n")
             for itype in INPUT_TYPES:
                 for rep in REPLICATES:
                     for tool, prefix in [("orfm_c", "c"), ("orfm_rs", "rs"), ("getorf", "getorf")]:
-                        timefile = f"benchmark/time_{prefix}_{itype}_{rep}.txt"
-                        vals = {}
-                        with open(timefile) as f:
-                            for line in f:
-                                key, val = line.strip().split("\t")
-                                vals[key] = val
-                        wall = vals.get("wall_clock_s", "NA")
-                        rss = vals.get("max_rss_kb", "NA")
+                        wall, rss = read_time(prefix, itype, rep)
                         out.write(f"{tool}\t{itype}\t{rep}\t{wall}\t{rss}\n")
-
-        # Print summary table (median of replicates)
-        import statistics
 
         def median_or_na(vals):
             nums = [float(v) for v in vals if v != "N/A"]
             return statistics.median(nums) if nums else None
 
-        data = {}  # (tool, itype) -> {wall: [...], rss: [...]}
+        data = {}
         for itype in INPUT_TYPES:
             for rep in REPLICATES:
-                for tool, prefix in [("C", "c"), ("Rust", "rs"), ("getorf", "getorf")]:
-                    timefile = f"benchmark/time_{prefix}_{itype}_{rep}.txt"
-                    vals = {}
-                    with open(timefile) as f:
-                        for line in f:
-                            key, val = line.strip().split("\t")
-                            vals[key] = val
+                for tool, prefix in [("C", "c"), ("Rs", "rs"), ("getorf", "getorf")]:
+                    wall, rss = read_time(prefix, itype, rep)
                     key = (tool, itype)
                     if key not in data:
                         data[key] = {"wall": [], "rss": []}
-                    data[key]["wall"].append(vals.get("wall_clock_s", "N/A"))
-                    data[key]["rss"].append(vals.get("max_rss_kb", "N/A"))
+                    data[key]["wall"].append(wall)
+                    data[key]["rss"].append(rss)
 
-        # Box-drawing table
-        # Columns: Input | C s | C MB | Rust s | Rust MB | getorf s | getorf MB | Rust/C
-        max_name = max(len(t) for t in INPUT_TYPES)
-        col_w  = max(max_name, 5)   # input name
-        ts_w   = 6   # time (s)
-        mb_w   = 6   # RAM (MB)
-        rat_w  = 6   # ratio
+        def fmt_s(v):   return f"{v:.2f}" if v is not None else "N/A"
+        def fmt_mb(v):  return f"{v/1024:.0f}" if v is not None else "N/A"
+        def fmt_rat(c, r): return f"{r/c:.2f}x" if (c and r) else "N/A"
 
-        def fmt_s(v):
-            return f"{v:.2f}" if v is not None else "N/A"
+        def print_table(type_list, include_getorf):
+            col_w = max(max(len(t) for t in type_list), 5)
+            ts_w, rat_w = 6, 6
+            cols = [("Input", col_w), ("C (s)", ts_w), ("Rs (s)", ts_w)]
+            if include_getorf:
+                cols.append(("go (s)", ts_w))
+            cols.append(("Rs/C", rat_w))
 
-        def fmt_mb(v):
-            return f"{v/1024:.0f}" if v is not None else "N/A"
+            def hline(l, m, r):
+                return l + m.join("─" * (w + 2) for _, w in cols) + r
 
-        def fmt_rat(c, r):
-            return f"{r/c:.2f}x" if (c is not None and r is not None) else "N/A"
+            lines = [hline("┌", "┬", "┐")]
+            lines.append("│" + "│".join(f" {h:^{w}} " for h, w in cols) + "│")
+            lines.append(hline("├", "┼", "┤"))
+            for i, itype in enumerate(type_list):
+                if i > 0:
+                    lines.append(hline("├", "┼", "┤"))
+                c_w  = median_or_na(data[("C",  itype)]["wall"])
+                r_w  = median_or_na(data[("Rs", itype)]["wall"])
+                g_w  = median_or_na(data[("getorf", itype)]["wall"]) if include_getorf else None
+                cells = [
+                    f" {itype:<{col_w}} ",
+                    f" {fmt_s(c_w):>{ts_w}} ",
+                    f" {fmt_s(r_w):>{ts_w}} ",
+                ]
+                if include_getorf:
+                    cells.append(f" {fmt_s(g_w):>{ts_w}} ")
+                cells.append(f" {fmt_rat(c_w, r_w):>{rat_w}} ")
+                lines.append("│" + "│".join(cells) + "│")
+            lines.append(hline("└", "┴", "┘"))
+            print("\n".join(lines))
 
-        # Build column specs: (header, width)
-        cols = [
-            ("Input",    col_w),
-            ("C (s)",    ts_w),
-            ("C (MB)",   mb_w),
-            ("Rs (s)",   ts_w),
-            ("Rs (MB)",  mb_w),
-            ("go (s)",   ts_w),
-            ("go (MB)",  mb_w),
-            ("Rs/C",     rat_w),
-        ]
-
-        def hline(left, mid, right, fill="─"):
-            parts = [fill * (w + 2) for _, w in cols]
-            return left + mid.join(parts) + right
-
-        lines = []
-        lines.append(hline("┌", "┬", "┐"))
-        header = "│" + "│".join(f" {h:^{w}} " for h, w in cols) + "│"
-        lines.append(header)
-        lines.append(hline("├", "┼", "┤"))
-
-        first = True
-        for itype in INPUT_TYPES:
-            if not first:
-                lines.append(hline("├", "┼", "┤"))
-            first = False
-
-            c_w_val  = median_or_na(data[("C",      itype)]["wall"])
-            c_mb_val = median_or_na(data[("C",      itype)]["rss"])
-            r_w_val  = median_or_na(data[("Rust",   itype)]["wall"])
-            r_mb_val = median_or_na(data[("Rust",   itype)]["rss"])
-            g_w_val  = median_or_na(data[("getorf", itype)]["wall"])
-            g_mb_val = median_or_na(data[("getorf", itype)]["rss"])
-
-            cells = [
-                f" {itype:<{col_w}} ",
-                f" {fmt_s(c_w_val):>{ts_w}} ",
-                f" {fmt_mb(c_mb_val):>{mb_w}} ",
-                f" {fmt_s(r_w_val):>{ts_w}} ",
-                f" {fmt_mb(r_mb_val):>{mb_w}} ",
-                f" {fmt_s(g_w_val):>{ts_w}} ",
-                f" {fmt_mb(g_mb_val):>{mb_w}} ",
-                f" {fmt_rat(c_w_val, r_w_val):>{rat_w}} ",
-            ]
-            lines.append("│" + "│".join(cells) + "│")
-
-        lines.append(hline("└", "┴", "┘"))
-        print("\n".join(lines))
+        print_table(list(INPUT_TYPES.keys()), include_getorf=True)

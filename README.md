@@ -117,7 +117,7 @@ let caller = OrfCaller::new(1, 96, None).unwrap(); // table_id, min_length, posi
 
 // Iterate over ORFs from a file
 for orf in caller.call_from_file("input.fasta") {
-    println!("{}", orf.header());
+    println!(">{}", orf.name());
     println!("{}", std::str::from_utf8(&orf.protein).unwrap());
 }
 

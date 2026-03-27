@@ -136,12 +136,12 @@ fn process_fastq_file(
                         continue;
                     }
                     if let Some(ref mut tw) = transcript_out {
-                        writeln!(tw, "{}", orf.header()).unwrap();
+                        writeln!(tw, ">{}", orf.name()).unwrap();
                         let transcript = orf.transcript(seq);
                         tw.write_all(&transcript).unwrap();
                         writeln!(tw).unwrap();
                     }
-                    writeln!(out, "{}", orf.header()).unwrap();
+                    writeln!(out, ">{}", orf.name()).unwrap();
                     out.write_all(&orf.protein).unwrap();
                     if print_stop_codons && orf.has_stop_codon {
                         out.write_all(b"*").unwrap();
@@ -188,12 +188,12 @@ fn process_fastq_reader(
                     continue;
                 }
                 if let Some(ref mut tw) = transcript_out {
-                    writeln!(tw, "{}", orf.header()).unwrap();
+                    writeln!(tw, ">{}", orf.name()).unwrap();
                     let transcript = orf.transcript(seq);
                     tw.write_all(&transcript).unwrap();
                     writeln!(tw).unwrap();
                 }
-                writeln!(out, "{}", orf.header()).unwrap();
+                writeln!(out, ">{}", orf.name()).unwrap();
                 out.write_all(&orf.protein).unwrap();
                 if print_stop_codons && orf.has_stop_codon {
                     out.write_all(b"*").unwrap();
@@ -217,7 +217,11 @@ fn process_with_needletail(
     out: &mut BufWriter<io::StdoutLock>,
     transcript_out: &mut Option<BufWriter<std::fs::File>>,
 ) {
-    while let Some(Ok(record)) = reader.next() {
+    while let Some(result) = reader.next() {
+        let record = result.unwrap_or_else(|e| {
+            eprintln!("Error reading record: {e}");
+            std::process::exit(1);
+        });
         let (name, comment) = split_header(record.id());
         let seq = record.seq();
         let orfs = caller.find_orfs(name, comment, &seq);
@@ -226,12 +230,12 @@ fn process_with_needletail(
                 continue;
             }
             if let Some(ref mut tw) = transcript_out {
-                writeln!(tw, "{}", orf.header()).unwrap();
+                writeln!(tw, ">{}", orf.name()).unwrap();
                 let transcript = orf.transcript(&seq);
                 tw.write_all(&transcript).unwrap();
                 writeln!(tw).unwrap();
             }
-            writeln!(out, "{}", orf.header()).unwrap();
+            writeln!(out, ">{}", orf.name()).unwrap();
             out.write_all(&orf.protein).unwrap();
             if print_stop_codons && orf.has_stop_codon {
                 out.write_all(b"*").unwrap();

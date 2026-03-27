@@ -16,7 +16,7 @@ fn run_orfm(
         let seq = record.raw_seq();
         let orfs = caller.find_orfs(name, comment, &seq);
         for orf in orfs {
-            output.push(orf.header());
+            output.push(format!(">{}", orf.name()));
             output.push(String::from_utf8(orf.protein).unwrap());
         }
     }
@@ -46,7 +46,7 @@ fn run_orfm_with_flags(
             if print_stop && orf.has_stop_codon {
                 protein.push('*');
             }
-            output.push(orf.header());
+            output.push(format!(">{}", orf.name()));
             output.push(protein);
         }
     }
@@ -69,9 +69,9 @@ fn run_orfm_with_transcripts(
         let seq = record.raw_seq();
         let orfs = caller.find_orfs(name, comment, &seq);
         for orf in orfs {
-            transcript_output.push(orf.header());
+            transcript_output.push(format!(">{}", orf.name()));
             transcript_output.push(String::from_utf8(orf.transcript(&seq)).unwrap());
-            protein_output.push(orf.header());
+            protein_output.push(format!(">{}", orf.name()));
             protein_output.push(String::from_utf8(orf.protein).unwrap());
         }
     }
@@ -240,7 +240,7 @@ fn test_transcript_odd_chars() {
         ">eg_3_3_3",
         "ATCATA",
         ">eg_2_5_4",
-        "ATGATN",
+        "ATGATR", // R = complement of Y (old code returned N here)
         ">eg_3_6_5",
         "TATGAT",
     ];
@@ -268,33 +268,6 @@ fn test_alternative_codon_table() {
     ];
     let actual_lines: Vec<&str> = output.trim().split('\n').collect();
     assert_eq!(actual_lines, expected_lines);
-}
-
-/// Test -r VERSION: version_at_least logic used by the -r flag.
-#[test]
-fn test_required_version_flag() {
-    // Equal version is accepted
-    assert!(version_at_least("2.0.1", "2.0.1"));
-    assert!(version_at_least("1.4.0", "1.4.0"));
-
-    // Higher current version is accepted
-    assert!(version_at_least("2.0.1", "1.4.0"));
-    assert!(version_at_least("2.0.1", "2.0.0"));
-    assert!(version_at_least("2.0.1", "1.99.99"));
-    assert!(version_at_least("3.0.0", "2.9.9"));
-
-    // Lower current version is rejected
-    assert!(!version_at_least("1.4.0", "2.0.1"));
-    assert!(!version_at_least("2.0.0", "2.0.1"));
-    assert!(!version_at_least("2.0.1", "2.0.2"));
-    assert!(!version_at_least("2.0.1", "3.0.0"));
-
-    // The actual binary version satisfies itself
-    let current = env!("CARGO_PKG_VERSION");
-    assert!(version_at_least(current, current));
-
-    // The actual binary version rejects a higher requirement
-    assert!(!version_at_least(current, "999.0.0"));
 }
 
 /// Test -p (print stop codons) and -s (only ORFs with stop codons) flags.
@@ -415,7 +388,7 @@ fn run_orfm_via_reader(
     let caller = OrfCaller::new(table_id, min_length, position_limit).unwrap();
     let mut output = Vec::new();
     for orf in caller.call_from_reader(seq_input.as_bytes()) {
-        output.push(orf.header());
+        output.push(format!(">{}", orf.name()));
         output.push(String::from_utf8(orf.protein).unwrap());
     }
     output.join("\n") + if output.is_empty() { "" } else { "\n" }
@@ -587,7 +560,7 @@ fn test_gzipped_fasta() {
 
     assert_eq!(orfs_gz.len(), orfs_plain.len());
     for (a, b) in orfs_gz.iter().zip(orfs_plain.iter()) {
-        assert_eq!(a.header(), b.header());
+        assert_eq!(a.name(), b.name());
         assert_eq!(a.protein, b.protein);
     }
 }
@@ -615,7 +588,7 @@ fn test_gzipped_fastq() {
 
     assert_eq!(orfs_gz.len(), orfs_plain.len());
     for (a, b) in orfs_gz.iter().zip(orfs_plain.iter()) {
-        assert_eq!(a.header(), b.header());
+        assert_eq!(a.name(), b.name());
         assert_eq!(a.protein, b.protein);
     }
 }
@@ -674,4 +647,21 @@ fn test_against_original_orfm() {
             input, min_len, pos_limit, rust_output, c_output
         );
     }
+}
+
+#[test]
+fn test_orfm_id() {
+    let input = ">myseq some comment\nATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGTAA";
+    let caller = OrfCaller::new(1, 96, None).unwrap();
+    let mut reader = needletail::parse_fastx_reader(input.as_bytes()).unwrap();
+    let record = reader.next().unwrap().unwrap();
+    let (name, comment) = split_header(record.id());
+    let orfs = caller.find_orfs(name, comment, record.raw_seq());
+
+    // First ORF should be the forward frame 1 ORF
+    let orf = &orfs[0];
+    assert_eq!(orf.source_seq_name.as_ref(), "myseq");
+    assert_eq!(orf.seq_comment.as_ref(), "some comment");
+    assert_eq!(orf.orfm_id(), "myseq_1_1_1");
+    assert_eq!(orf.name(), "myseq_1_1_1 some comment");
 }

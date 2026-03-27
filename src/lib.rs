@@ -1,5 +1,6 @@
 use aho_corasick::AhoCorasick;
 use std::io;
+use std::sync::Arc;
 
 mod codon_tables;
 use codon_tables::get_codon_table;
@@ -8,9 +9,9 @@ use codon_tables::get_codon_table;
 #[derive(Debug, Clone)]
 pub struct Orf {
     /// Name of the source sequence (before first whitespace in header).
-    pub seq_name: String,
+    pub source_seq_name: Arc<str>,
     /// Comment from the source sequence header (after first whitespace, may be empty).
-    pub seq_comment: String,
+    pub seq_comment: Arc<str>,
     /// 0-based start position in the original nucleotide sequence.
     pub start: usize,
     /// Frame number (1-6). 1-3 are forward, 4-6 are reverse complement.
@@ -28,25 +29,24 @@ pub struct Orf {
 }
 
 impl Orf {
-    /// Format the FASTA header for this ORF.
-    pub fn header(&self) -> String {
+    /// Return the ORF identifier: `{source_seq_name}_{start}_{frame}_{orf_number}`.
+    /// Start is 1-based in the output.
+    pub fn orfm_id(&self) -> String {
+        format!(
+            "{}_{}_{}_{}",
+            self.source_seq_name,
+            self.start + 1,
+            self.frame,
+            self.orf_number
+        )
+    }
+
+    /// Return the full ORF name: the orfm_id followed by the comment (if any).
+    pub fn name(&self) -> String {
         if self.seq_comment.is_empty() {
-            format!(
-                ">{}_{}_{}_{}",
-                self.seq_name,
-                self.start + 1,
-                self.frame,
-                self.orf_number
-            )
+            self.orfm_id()
         } else {
-            format!(
-                ">{}_{}_{}_{} {}",
-                self.seq_name,
-                self.start + 1,
-                self.frame,
-                self.orf_number,
-                self.seq_comment
-            )
+            format!("{} {}", self.orfm_id(), self.seq_comment)
         }
     }
 
@@ -72,21 +72,32 @@ pub struct OrfCaller {
     position_limit: Option<usize>,
 }
 
-/// Reverse complement a single base.
+/// Reverse complement a single base, including all IUPAC ambiguity codes.
 #[inline]
 fn revcom_base(b: u8) -> u8 {
-    match b {
+    // Compute the complement in uppercase, then restore original case.
+    let upper_comp = match b.to_ascii_uppercase() {
         b'A' => b'T',
-        b'T' => b'A',
+        b'T' | b'U' => b'A',
         b'G' => b'C',
         b'C' => b'G',
-        b'a' => b't',
-        b't' => b'a',
-        b'g' => b'c',
-        b'c' => b'g',
         b'N' => b'N',
-        b'n' => b'n',
+        b'R' => b'Y', // A|G  →  T|C
+        b'Y' => b'R', // C|T  →  G|A
+        b'S' => b'S', // G|C  →  C|G  (self-complementary)
+        b'W' => b'W', // A|T  →  T|A  (self-complementary)
+        b'K' => b'M', // G|T  →  C|A
+        b'M' => b'K', // A|C  →  T|G
+        b'B' => b'V', // C|G|T  →  G|C|A
+        b'D' => b'H', // A|G|T  →  T|C|A
+        b'H' => b'D', // A|C|T  →  T|G|A
+        b'V' => b'B', // A|C|G  →  T|G|C
         _ => b'N',
+    };
+    if b.is_ascii_lowercase() {
+        upper_comp.to_ascii_lowercase()
+    } else {
+        upper_comp
     }
 }
 
@@ -345,6 +356,10 @@ impl OrfCaller {
             return Some(Vec::new());
         }
 
+        // Create Arc<str> once per sequence; each ORF gets a cheap atomic-ref clone.
+        let name_arc: Arc<str> = Arc::from(name);
+        let comment_arc: Arc<str> = Arc::from(comment);
+
         let read_limit = match self.position_limit {
             Some(pl) if pl < seq_len => pl,
             _ => seq_len,
@@ -383,8 +398,8 @@ impl OrfCaller {
                 if orf_len >= self.min_length {
                     let protein = translate_forward(seq, last_pos[mod3], orf_len, &self.fast_table);
                     orfs.push(Orf {
-                        seq_name: name.to_string(),
-                        seq_comment: comment.to_string(),
+                        source_seq_name: name_arc.clone(),
+                        seq_comment: comment_arc.clone(),
                         start: last_pos[mod3],
                         frame: (mod3 as u8) + 1,
                         orf_number: orf_counter,
@@ -409,8 +424,8 @@ impl OrfCaller {
                     let protein =
                         translate_reverse(seq, last_pos[rev_idx], orf_len, &self.fast_table);
                     orfs.push(Orf {
-                        seq_name: name.to_string(),
-                        seq_comment: comment.to_string(),
+                        source_seq_name: name_arc.clone(),
+                        seq_comment: comment_arc.clone(),
                         start: last_pos[rev_idx],
                         frame: (mod3 as u8) + 4,
                         orf_number: orf_counter,
@@ -454,8 +469,8 @@ impl OrfCaller {
                 // stop codon only if that boundary was set by a previous RC stop codon.
                 let has_stop_codon = is_reverse && rev_left_is_stop[frame_idx - 3];
                 orfs.push(Orf {
-                    seq_name: name.to_string(),
-                    seq_comment: comment.to_string(),
+                    source_seq_name: name_arc.clone(),
+                    seq_comment: comment_arc.clone(),
                     start: last_pos[frame_idx],
                     frame: frame_num,
                     orf_number: orf_counter,
@@ -510,8 +525,7 @@ impl OrfCaller {
         OrfFileIter {
             caller: self,
             reader: needletail::parse_fastx_file(path).expect("Failed to open sequence file"),
-            current_orfs: Vec::new(),
-            current_idx: 0,
+            current_orfs: Vec::new().into_iter(),
             needs_normalize: false,
         }
     }
@@ -521,8 +535,7 @@ impl OrfCaller {
         OrfReaderIter {
             caller: self,
             reader: needletail::parse_fastx_reader(reader).expect("Failed to parse sequence input"),
-            current_orfs: Vec::new(),
-            current_idx: 0,
+            current_orfs: Vec::new().into_iter(),
             needs_normalize: false,
         }
     }
@@ -532,8 +545,7 @@ impl OrfCaller {
 pub struct OrfFileIter<'a> {
     caller: &'a OrfCaller,
     reader: Box<dyn needletail::FastxReader>,
-    current_orfs: Vec<Orf>,
-    current_idx: usize,
+    current_orfs: std::vec::IntoIter<Orf>,
     /// Once true, all subsequent records use seq() instead of raw_seq().
     needs_normalize: bool,
 }
@@ -543,36 +555,36 @@ impl Iterator for OrfFileIter<'_> {
 
     fn next(&mut self) -> Option<Orf> {
         loop {
-            if self.current_idx < self.current_orfs.len() {
-                let orf = self.current_orfs[self.current_idx].clone();
-                self.current_idx += 1;
+            if let Some(orf) = self.current_orfs.next() {
                 return Some(orf);
             }
 
             match self.reader.next() {
                 Some(Ok(record)) => {
                     let (name, comment) = split_header(record.id());
-                    if self.needs_normalize {
+                    let orfs = if self.needs_normalize {
                         let seq = record.seq();
-                        self.current_orfs =
-                            self.caller.find_orfs_internal(name, comment, &seq).unwrap();
+                        self.caller.find_orfs_internal(name, comment, &seq).unwrap()
                     } else {
                         match self
                             .caller
                             .find_orfs_internal(name, comment, record.raw_seq())
                         {
-                            Some(orfs) => self.current_orfs = orfs,
+                            Some(orfs) => orfs,
                             None => {
                                 self.needs_normalize = true;
                                 let seq = record.seq();
-                                self.current_orfs =
-                                    self.caller.find_orfs_internal(name, comment, &seq).unwrap();
+                                self.caller.find_orfs_internal(name, comment, &seq).unwrap()
                             }
                         }
-                    }
-                    self.current_idx = 0;
+                    };
+                    self.current_orfs = orfs.into_iter();
                 }
-                _ => return None,
+                Some(Err(e)) => {
+                    eprintln!("Error reading sequence record: {e}");
+                    std::process::exit(1);
+                }
+                None => return None,
             }
         }
     }
@@ -582,8 +594,7 @@ impl Iterator for OrfFileIter<'_> {
 pub struct OrfReaderIter<'a> {
     caller: &'a OrfCaller,
     reader: Box<dyn needletail::FastxReader + 'a>,
-    current_orfs: Vec<Orf>,
-    current_idx: usize,
+    current_orfs: std::vec::IntoIter<Orf>,
     /// Once true, all subsequent records use seq() instead of raw_seq().
     needs_normalize: bool,
 }
@@ -593,36 +604,36 @@ impl Iterator for OrfReaderIter<'_> {
 
     fn next(&mut self) -> Option<Orf> {
         loop {
-            if self.current_idx < self.current_orfs.len() {
-                let orf = self.current_orfs[self.current_idx].clone();
-                self.current_idx += 1;
+            if let Some(orf) = self.current_orfs.next() {
                 return Some(orf);
             }
 
             match self.reader.next() {
                 Some(Ok(record)) => {
                     let (name, comment) = split_header(record.id());
-                    if self.needs_normalize {
+                    let orfs = if self.needs_normalize {
                         let seq = record.seq();
-                        self.current_orfs =
-                            self.caller.find_orfs_internal(name, comment, &seq).unwrap();
+                        self.caller.find_orfs_internal(name, comment, &seq).unwrap()
                     } else {
                         match self
                             .caller
                             .find_orfs_internal(name, comment, record.raw_seq())
                         {
-                            Some(orfs) => self.current_orfs = orfs,
+                            Some(orfs) => orfs,
                             None => {
                                 self.needs_normalize = true;
                                 let seq = record.seq();
-                                self.current_orfs =
-                                    self.caller.find_orfs_internal(name, comment, &seq).unwrap();
+                                self.caller.find_orfs_internal(name, comment, &seq).unwrap()
                             }
                         }
-                    }
-                    self.current_idx = 0;
+                    };
+                    self.current_orfs = orfs.into_iter();
                 }
-                _ => return None,
+                Some(Err(e)) => {
+                    eprintln!("Error reading sequence record: {e}");
+                    std::process::exit(1);
+                }
+                None => return None,
             }
         }
     }
@@ -634,7 +645,7 @@ pub fn write_orfs_fasta<W: io::Write>(
     writer: &mut W,
 ) -> io::Result<()> {
     for orf in orfs {
-        writeln!(writer, "{}", orf.header())?;
+        writeln!(writer, ">{}", orf.name())?;
         writer.write_all(&orf.protein)?;
         writeln!(writer)?;
     }
