@@ -19,7 +19,7 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/wwood/OrfM/releases/dow
 
 OrfM can be installed by downloading pre-compiled binaries available at https://github.com/wwood/OrfM/releases. Once you have downloaded the package, extract and run it e.g. for GNU/Linux:
 ```sh
-tar xzf orfm-<version>.tar.gz
+tar xf orfm-<version>.tar.xz
 cd orfm-<version>
 ./orfm -h
 ```
