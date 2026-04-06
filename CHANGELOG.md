@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.1.1] - 2026-04-07
+
+### Fixed
+- Process substitution did not work correctly. Fixed.
+
 ## [2.1.0] - 2026-03-27
 
 Now ~25% faster than the old C implementation of OrfM (v1.4). Cleaned up API, fixed multi-line FASTA bug.
