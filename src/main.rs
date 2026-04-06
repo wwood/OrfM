@@ -333,7 +333,7 @@ fn main() {
         Some(path) => {
             // Check if the path is a regular file (not a FIFO/pipe from process substitution)
             let metadata = std::fs::metadata(path);
-            let is_regular_file = metadata.as_ref().map_or(false, |m| m.is_file());
+            let is_regular_file = metadata.as_ref().is_ok_and(|m| m.is_file());
 
             if is_regular_file && is_fastq_file(path) {
                 // Use the fastq crate's zero-copy parser for FASTQ input
