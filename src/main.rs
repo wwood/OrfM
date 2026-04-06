@@ -245,6 +245,47 @@ fn process_with_needletail(
     }
 }
 
+/// Read from a non-seekable source: peek at the first byte to detect format, then process.
+fn process_from_reader(
+    reader: impl Read + Send + 'static,
+    caller: &orfm::OrfCaller,
+    stop_codon_only: bool,
+    print_stop_codons: bool,
+    out: &mut BufWriter<io::StdoutLock>,
+    transcript_out: &mut Option<BufWriter<std::fs::File>>,
+) {
+    let mut first_byte = [0u8; 1];
+    let mut reader = reader;
+    let n = reader.read(&mut first_byte).unwrap_or(0);
+    if n == 1 && first_byte[0] == b'@' {
+        // FASTQ — use fastq crate
+        let chained = io::Cursor::new(first_byte.to_vec()).chain(reader);
+        process_fastq_reader(
+            chained,
+            caller,
+            stop_codon_only,
+            print_stop_codons,
+            out,
+            transcript_out,
+        );
+    } else {
+        // FASTA (or gzipped) — use needletail
+        let chained = io::Cursor::new(first_byte[..n].to_vec()).chain(reader);
+        let nr = needletail::parse_fastx_reader(chained).unwrap_or_else(|e| {
+            eprintln!("Cannot read input: {}", e);
+            std::process::exit(5);
+        });
+        process_with_needletail(
+            nr,
+            caller,
+            stop_codon_only,
+            print_stop_codons,
+            out,
+            transcript_out,
+        );
+    }
+}
+
 fn main() {
     let args = Args::parse();
 
@@ -290,7 +331,11 @@ fn main() {
 
     match &args.input {
         Some(path) => {
-            if is_fastq_file(path) {
+            // Check if the path is a regular file (not a FIFO/pipe from process substitution)
+            let metadata = std::fs::metadata(path);
+            let is_regular_file = metadata.as_ref().map_or(false, |m| m.is_file());
+
+            if is_regular_file && is_fastq_file(path) {
                 // Use the fastq crate's zero-copy parser for FASTQ input
                 process_fastq_file(
                     path,
@@ -301,7 +346,7 @@ fn main() {
                     &mut transcript_out,
                     &args.transcript,
                 );
-            } else {
+            } else if is_regular_file {
                 // Use needletail for FASTA input (handles wrapped sequences)
                 let reader = needletail::parse_fastx_file(path).unwrap_or_else(|e| {
                     eprintln!("Cannot open file '{}': {}", path, e);
@@ -315,40 +360,33 @@ fn main() {
                     &mut out,
                     &mut transcript_out,
                 );
+            } else {
+                // Non-seekable input (FIFO, /dev/fd/*, etc.) — open and detect format from first byte
+                let file = std::fs::File::open(path).unwrap_or_else(|e| {
+                    eprintln!("Cannot open file '{}': {}", path, e);
+                    std::process::exit(5);
+                });
+                process_from_reader(
+                    file,
+                    &caller,
+                    args.stop_codon_only,
+                    args.print_stop_codons,
+                    &mut out,
+                    &mut transcript_out,
+                );
             }
         }
         None => {
-            // stdin: read first byte to determine format, then chain it back
+            // stdin: detect format from first byte
             let stdin = io::stdin();
-            let mut first_byte = [0u8; 1];
-            let n = stdin.lock().read(&mut first_byte).unwrap_or(0);
-            if n == 1 && first_byte[0] == b'@' {
-                // FASTQ from stdin — use fastq crate
-                let chained = io::Cursor::new(first_byte.to_vec()).chain(stdin);
-                process_fastq_reader(
-                    chained,
-                    &caller,
-                    args.stop_codon_only,
-                    args.print_stop_codons,
-                    &mut out,
-                    &mut transcript_out,
-                );
-            } else {
-                // FASTA (or gzipped) from stdin — use needletail
-                let chained = io::Cursor::new(first_byte[..n].to_vec()).chain(stdin);
-                let reader = needletail::parse_fastx_reader(chained).unwrap_or_else(|e| {
-                    eprintln!("Cannot read stdin: {}", e);
-                    std::process::exit(5);
-                });
-                process_with_needletail(
-                    reader,
-                    &caller,
-                    args.stop_codon_only,
-                    args.print_stop_codons,
-                    &mut out,
-                    &mut transcript_out,
-                );
-            }
+            process_from_reader(
+                stdin,
+                &caller,
+                args.stop_codon_only,
+                args.print_stop_codons,
+                &mut out,
+                &mut transcript_out,
+            );
         }
     }
 }
